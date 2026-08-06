@@ -1,10 +1,10 @@
 package civ.view;
 
+import civ.model.Game;
 import civ.util.MusicPlayer;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
 import java.awt.CardLayout;
-import java.awt.Color;
 
 /**
  * Top-level window. Uses CardLayout to switch between menu and game screens.
@@ -33,11 +33,10 @@ public class MainWindow extends JFrame {
         return music;
     }
 
-    /** Called when the player presses Start. Step 1 only shows an empty game screen. */
+    /** Called when the player presses Start. Opens a new map. */
     public void startNewGame() {
-        JPanel emptyGame = new JPanel();
-        emptyGame.setBackground(new Color(60, 70, 85));
-        root.add(emptyGame, "game");
+        Game game = new Game(System.currentTimeMillis());
+        root.add(new GameScreen(game), "game");
         cards.show(root, "game");
     }
 
