@@ -12,6 +12,8 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Polygon;
 import java.awt.RenderingHints;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
@@ -27,11 +29,16 @@ public class MapPanel extends JPanel {
     private static final double HEX_SIZE = 34;
     private static final double[] ZOOM_LEVELS = {0.55, 0.75, 1.0, 1.35, 1.8};
 
+    /** Undiscovered hexes — dark but clearly visible as a grid, not invisible black. */
+    private static final Color FOG_FILL = new Color(42, 48, 62);
+    private static final Color FOG_EDGE = new Color(72, 80, 98);
+
     private final Game game;
 
     private int zoomIndex = 2;
     private double cameraX = 0;
     private double cameraY = 0;
+    private boolean cameraReady = false;
 
     private int dragStartX;
     private int dragStartY;
@@ -40,19 +47,28 @@ public class MapPanel extends JPanel {
 
     public MapPanel(Game game) {
         this.game = game;
-        setBackground(Color.BLACK);
+        setBackground(new Color(18, 20, 28));
         setFocusable(true);
-        centerCameraOnStart();
         installMouse();
         installKeys();
+        addComponentListener(new ComponentAdapter() {
+            @Override
+            public void componentResized(ComponentEvent e) {
+                if (!cameraReady && getWidth() > 0 && getHeight() > 0) {
+                    centerCameraOnTownHall();
+                    cameraReady = true;
+                    repaint();
+                }
+            }
+        });
     }
 
-    private void centerCameraOnStart() {
+    /** Puts the Town Hall hex in the middle of the panel. */
+    private void centerCameraOnTownHall() {
         double worldX = HexGeometry.centerX(game.getCentreCol(), game.getCentreRow(), HEX_SIZE);
         double worldY = HexGeometry.centerY(game.getCentreCol(), game.getCentreRow(), HEX_SIZE);
-        // Will be refined once the panel has a size; approximate for first paint.
-        cameraX = worldX - 400;
-        cameraY = worldY - 300;
+        cameraX = worldX - (getWidth() / 2.0) / zoom();
+        cameraY = worldY - (getHeight() / 2.0) / zoom();
     }
 
     private double zoom() {
@@ -83,8 +99,15 @@ public class MapPanel extends JPanel {
         });
 
         addMouseWheelListener((MouseWheelEvent e) -> {
+            // Keep the world point under the mouse stable while changing zoom.
+            double mouseWorldX = e.getX() / zoom() + cameraX;
+            double mouseWorldY = e.getY() / zoom() + cameraY;
+
             int newIndex = zoomIndex - e.getWheelRotation();
             zoomIndex = Math.max(0, Math.min(ZOOM_LEVELS.length - 1, newIndex));
+
+            cameraX = mouseWorldX - e.getX() / zoom();
+            cameraY = mouseWorldY - e.getY() / zoom();
             repaint();
         });
     }
@@ -93,13 +116,22 @@ public class MapPanel extends JPanel {
         addKeyListener(new KeyAdapter() {
             @Override
             public void keyPressed(KeyEvent e) {
+                double before = zoom();
                 if (e.getKeyChar() == '+' || e.getKeyChar() == '=') {
                     zoomIndex = Math.min(ZOOM_LEVELS.length - 1, zoomIndex + 1);
-                    repaint();
                 } else if (e.getKeyChar() == '-' || e.getKeyChar() == '_') {
                     zoomIndex = Math.max(0, zoomIndex - 1);
-                    repaint();
+                } else {
+                    return;
                 }
+                // Zoom toward the centre of the panel.
+                double cx = getWidth() / 2.0;
+                double cy = getHeight() / 2.0;
+                double worldX = cx / before + cameraX;
+                double worldY = cy / before + cameraY;
+                cameraX = worldX - cx / zoom();
+                cameraY = worldY - cy / zoom();
+                repaint();
             }
         });
     }
@@ -107,6 +139,11 @@ public class MapPanel extends JPanel {
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
+        if (!cameraReady && getWidth() > 0 && getHeight() > 0) {
+            centerCameraOnTownHall();
+            cameraReady = true;
+        }
+
         Graphics2D g2 = (Graphics2D) g;
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
@@ -128,12 +165,14 @@ public class MapPanel extends JPanel {
     private void drawHex(Graphics2D g2, Hex hex) {
         double cx = screenX(hex.getCol(), hex.getRow());
         double cy = screenY(hex.getCol(), hex.getRow());
-        Polygon shape = HexGeometry.polygon(cx, cy, HEX_SIZE * zoom());
+        // Slightly smaller than centre spacing so edges stay crisp and don't smear together.
+        Polygon shape = HexGeometry.polygon(cx, cy, HEX_SIZE * zoom() * 0.95);
 
         if (!hex.isDiscovered()) {
-            g2.setColor(new Color(12, 12, 18));
+            g2.setColor(FOG_FILL);
             g2.fillPolygon(shape);
-            g2.setColor(new Color(25, 25, 32));
+            g2.setColor(FOG_EDGE);
+            g2.setStroke(new BasicStroke(1.2f));
             g2.drawPolygon(shape);
             return;
         }
@@ -141,12 +180,13 @@ public class MapPanel extends JPanel {
         g2.setColor(colourOf(hex));
         g2.fillPolygon(shape);
 
-        g2.setColor(new Color(0, 0, 0, 70));
+        g2.setColor(new Color(0, 0, 0, 90));
+        g2.setStroke(new BasicStroke(1f));
         g2.drawPolygon(shape);
 
         if (hex.isOwned()) {
             g2.setColor(new Color(255, 220, 90));
-            g2.setStroke(new BasicStroke(2f));
+            g2.setStroke(new BasicStroke(2.5f));
             g2.drawPolygon(shape);
             g2.setStroke(new BasicStroke(1f));
         }
@@ -155,7 +195,7 @@ public class MapPanel extends JPanel {
 
         // Town Hall marker at the map centre (building class arrives in a later step).
         if (hex.getCol() == game.getCentreCol() && hex.getRow() == game.getCentreRow()) {
-            int size = (int) (16 * zoom());
+            int size = Math.max(8, (int) (16 * zoom()));
             g2.setColor(new Color(240, 240, 250));
             g2.fillRect((int) (cx - size / 2.0), (int) (cy - size / 2.0), size, size);
             g2.setColor(Color.BLACK);
@@ -181,7 +221,8 @@ public class MapPanel extends JPanel {
     }
 
     private void drawHexContents(Graphics2D g2, Hex hex, double cx, double cy) {
-        g2.setFont(new Font("SansSerif", Font.BOLD, (int) (11 * zoom())));
+        int fontSize = Math.max(9, (int) (11 * zoom()));
+        g2.setFont(new Font("SansSerif", Font.BOLD, fontSize));
 
         if (hex.hasResource()) {
             g2.setColor(Color.WHITE);
