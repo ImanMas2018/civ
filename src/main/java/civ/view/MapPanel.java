@@ -10,7 +10,6 @@ import java.awt.Color;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
-import java.awt.Polygon;
 import java.awt.RenderingHints;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
@@ -20,18 +19,22 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionAdapter;
 import java.awt.event.MouseWheelEvent;
+import java.awt.geom.Path2D;
 
 /**
  * Draws the hex map with fog of war. Supports discrete zoom and camera pan.
  */
 public class MapPanel extends JPanel {
 
-    private static final double HEX_SIZE = 34;
-    private static final double[] ZOOM_LEVELS = {0.55, 0.75, 1.0, 1.35, 1.8};
+    /** Distance from hex centre to a vertex, in world pixels (before zoom). */
+    private static final double HEX_SIZE = 40;
 
-    /** Undiscovered hexes — dark but clearly visible as a grid, not invisible black. */
-    private static final Color FOG_FILL = new Color(42, 48, 62);
-    private static final Color FOG_EDGE = new Color(72, 80, 98);
+    /** Discrete zoom steps — lowest still keeps hexes clearly 6-sided. */
+    private static final double[] ZOOM_LEVELS = {0.7, 0.85, 1.0, 1.25, 1.55};
+
+    private static final Color FOG_FILL = new Color(52, 60, 78);
+    private static final Color FOG_EDGE = new Color(90, 100, 122);
+    private static final Color BG = new Color(18, 20, 28);
 
     private final Game game;
 
@@ -47,7 +50,7 @@ public class MapPanel extends JPanel {
 
     public MapPanel(Game game) {
         this.game = game;
-        setBackground(new Color(18, 20, 28));
+        setBackground(BG);
         setFocusable(true);
         installMouse();
         installKeys();
@@ -63,7 +66,6 @@ public class MapPanel extends JPanel {
         });
     }
 
-    /** Puts the Town Hall hex in the middle of the panel. */
     private void centerCameraOnTownHall() {
         double worldX = HexGeometry.centerX(game.getCentreCol(), game.getCentreRow(), HEX_SIZE);
         double worldY = HexGeometry.centerY(game.getCentreCol(), game.getCentreRow(), HEX_SIZE);
@@ -73,6 +75,11 @@ public class MapPanel extends JPanel {
 
     private double zoom() {
         return ZOOM_LEVELS[zoomIndex];
+    }
+
+    /** On-screen outer radius of one hex at the current zoom. */
+    private double screenHexSize() {
+        return HEX_SIZE * zoom();
     }
 
     private void installMouse() {
@@ -99,7 +106,6 @@ public class MapPanel extends JPanel {
         });
 
         addMouseWheelListener((MouseWheelEvent e) -> {
-            // Keep the world point under the mouse stable while changing zoom.
             double mouseWorldX = e.getX() / zoom() + cameraX;
             double mouseWorldY = e.getY() / zoom() + cameraY;
 
@@ -124,7 +130,6 @@ public class MapPanel extends JPanel {
                 } else {
                     return;
                 }
-                // Zoom toward the centre of the panel.
                 double cx = getWidth() / 2.0;
                 double cy = getHeight() / 2.0;
                 double worldX = cx / before + cameraX;
@@ -144,14 +149,16 @@ public class MapPanel extends JPanel {
             cameraReady = true;
         }
 
-        Graphics2D g2 = (Graphics2D) g;
+        Graphics2D g2 = (Graphics2D) g.create();
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g2.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
 
         for (int col = 0; col < game.getMap().getCols(); col++) {
             for (int row = 0; row < game.getMap().getRows(); row++) {
                 drawHex(g2, game.getMap().get(col, row));
             }
         }
+        g2.dispose();
     }
 
     private double screenX(int col, int row) {
@@ -165,41 +172,39 @@ public class MapPanel extends JPanel {
     private void drawHex(Graphics2D g2, Hex hex) {
         double cx = screenX(hex.getCol(), hex.getRow());
         double cy = screenY(hex.getCol(), hex.getRow());
-        // Slightly smaller than centre spacing so edges stay crisp and don't smear together.
-        Polygon shape = HexGeometry.polygon(cx, cy, HEX_SIZE * zoom() * 0.95);
+        // 0.98 leaves a 1-pixel hairline so edges stay readable without breaking the hex shape.
+        Path2D.Double shape = HexGeometry.hexPath(cx, cy, screenHexSize() * 0.98);
 
         if (!hex.isDiscovered()) {
             g2.setColor(FOG_FILL);
-            g2.fillPolygon(shape);
+            g2.fill(shape);
             g2.setColor(FOG_EDGE);
-            g2.setStroke(new BasicStroke(1.2f));
-            g2.drawPolygon(shape);
+            g2.setStroke(new BasicStroke(1.0f));
+            g2.draw(shape);
             return;
         }
 
         g2.setColor(colourOf(hex));
-        g2.fillPolygon(shape);
+        g2.fill(shape);
 
-        g2.setColor(new Color(0, 0, 0, 90));
-        g2.setStroke(new BasicStroke(1f));
-        g2.drawPolygon(shape);
+        g2.setColor(new Color(0, 0, 0, 100));
+        g2.setStroke(new BasicStroke(1.0f));
+        g2.draw(shape);
 
         if (hex.isOwned()) {
             g2.setColor(new Color(255, 220, 90));
-            g2.setStroke(new BasicStroke(2.5f));
-            g2.drawPolygon(shape);
-            g2.setStroke(new BasicStroke(1f));
+            g2.setStroke(new BasicStroke(2.0f));
+            g2.draw(shape);
         }
 
         drawHexContents(g2, hex, cx, cy);
 
-        // Town Hall marker at the map centre (building class arrives in a later step).
         if (hex.getCol() == game.getCentreCol() && hex.getRow() == game.getCentreRow()) {
-            int size = Math.max(8, (int) (16 * zoom()));
+            int marker = Math.max(10, (int) (14 * zoom()));
             g2.setColor(new Color(240, 240, 250));
-            g2.fillRect((int) (cx - size / 2.0), (int) (cy - size / 2.0), size, size);
+            g2.fillRect((int) (cx - marker / 2.0), (int) (cy - marker / 2.0), marker, marker);
             g2.setColor(Color.BLACK);
-            g2.drawRect((int) (cx - size / 2.0), (int) (cy - size / 2.0), size, size);
+            g2.drawRect((int) (cx - marker / 2.0), (int) (cy - marker / 2.0), marker, marker);
         }
     }
 
@@ -221,17 +226,17 @@ public class MapPanel extends JPanel {
     }
 
     private void drawHexContents(Graphics2D g2, Hex hex, double cx, double cy) {
-        int fontSize = Math.max(9, (int) (11 * zoom()));
+        int fontSize = Math.max(10, (int) (12 * zoom()));
         g2.setFont(new Font("SansSerif", Font.BOLD, fontSize));
 
         if (hex.hasResource()) {
             g2.setColor(Color.WHITE);
             String letter = hex.getDeposit().getLabel().substring(0, 1);
             g2.drawString(letter + " " + hex.getDepositAmount(),
-                    (int) (cx - 14 * zoom()), (int) (cy - 8 * zoom()));
+                    (int) (cx - 12 * zoom()), (int) (cy - 4 * zoom()));
         } else if (hex.isExhausted()) {
             g2.setColor(new Color(210, 90, 90));
-            g2.drawString("empty", (int) (cx - 16 * zoom()), (int) (cy - 8 * zoom()));
+            g2.drawString("empty", (int) (cx - 16 * zoom()), (int) (cy - 4 * zoom()));
         }
     }
 }

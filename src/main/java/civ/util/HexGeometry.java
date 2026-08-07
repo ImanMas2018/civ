@@ -1,14 +1,26 @@
 package civ.util;
 
-import java.awt.Polygon;
+import java.awt.geom.Path2D;
 
 /**
  * All hex-grid maths in one place (odd-r offset coordinates, pointy-top hexes).
  * Static toolbox — do not create instances.
+ *
+ * {@code size} is always the distance from the hex centre to a vertex (the outer radius).
  */
 public final class HexGeometry {
 
     private HexGeometry() {
+    }
+
+    /** Horizontal distance between centres of adjacent columns (same row). */
+    public static double horizSpacing(double size) {
+        return Math.sqrt(3) * size;
+    }
+
+    /** Vertical distance between centres of adjacent rows. */
+    public static double vertSpacing(double size) {
+        return 1.5 * size;
     }
 
     /** Neighbour offsets: [even/odd row][direction 0..5][col/row delta]. */
@@ -36,28 +48,39 @@ public final class HexGeometry {
     }
 
     public static double centerX(int col, int row, double size) {
-        return size * Math.sqrt(3) * (col + 0.5 * (row & 1)) + size;
+        return size + horizSpacing(size) * (col + 0.5 * (row & 1));
     }
 
     public static double centerY(int col, int row, double size) {
-        return size * 1.5 * row + size;
+        return size + vertSpacing(size) * row;
     }
 
-    public static Polygon polygon(double cx, double cy, double size) {
-        Polygon p = new Polygon();
-        for (int i = 0; i < 6; i++) {
-            double angle = Math.toRadians(60 * i - 90);
-            int x = (int) Math.round(cx + size * Math.cos(angle));
-            int y = (int) Math.round(cy + size * Math.sin(angle));
-            p.addPoint(x, y);
-        }
-        return p;
+    /**
+     * A pointy-top regular hexagon as a Path2D (double precision — avoids
+     * int-rounding that can collapse a hex into a triangle at small sizes).
+     *
+     * Corners are the classic 6 offsets, no trig loop at draw time:
+     *   (0,-1), (±√3/2, -1/2), (±√3/2, +1/2), (0,+1)
+     */
+    public static Path2D.Double hexPath(double cx, double cy, double size) {
+        double w = Math.sqrt(3) / 2.0 * size; // half-width
+        double h = size;                       // half-height (centre to tip)
+
+        Path2D.Double path = new Path2D.Double();
+        path.moveTo(cx, cy - h);       // top
+        path.lineTo(cx + w, cy - h / 2); // top-right
+        path.lineTo(cx + w, cy + h / 2); // bottom-right
+        path.lineTo(cx, cy + h);       // bottom
+        path.lineTo(cx - w, cy + h / 2); // bottom-left
+        path.lineTo(cx - w, cy - h / 2); // top-left
+        path.closePath();
+        return path;
     }
 
     /** Nearest hex under a world-pixel point, or {-1, -1} if none. */
     public static int[] pixelToHex(double x, double y, double size, int cols, int rows) {
-        int guessRow = (int) (y / (size * 1.5));
-        int guessCol = (int) (x / (size * Math.sqrt(3)));
+        int guessRow = (int) (y / vertSpacing(size));
+        int guessCol = (int) (x / horizSpacing(size));
 
         int bestCol = -1;
         int bestRow = -1;
