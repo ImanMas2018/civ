@@ -14,6 +14,7 @@ public class MainWindow extends JFrame {
     private final CardLayout cards = new CardLayout();
     private final JPanel root = new JPanel(cards);
     private final MusicPlayer music = new MusicPlayer();
+    private GameScreen gameScreen;
 
     public MainWindow() {
         setTitle("Civ — Advanced Programming");
@@ -35,8 +36,14 @@ public class MainWindow extends JFrame {
 
     /** Called when the player presses Start. Opens a new map. */
     public void startNewGame() {
+        // Drop the previous screen, otherwise every Start press leaves another
+        // full map panel behind under the same card name.
+        if (gameScreen != null) {
+            root.remove(gameScreen);
+        }
         Game game = new Game(System.currentTimeMillis());
-        root.add(new GameScreen(game), "game");
+        gameScreen = new GameScreen(game);
+        root.add(gameScreen, "game");
         cards.show(root, "game");
     }
 
