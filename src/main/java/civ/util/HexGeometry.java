@@ -63,10 +63,21 @@ public final class HexGeometry {
      *   (0,-1), (±√3/2, -1/2), (±√3/2, +1/2), (0,+1)
      */
     public static Path2D.Double hexPath(double cx, double cy, double size) {
+        Path2D.Double path = new Path2D.Double();
+        writeHexPath(path, cx, cy, size);
+        return path;
+    }
+
+    /**
+     * Same hexagon, but written into a path you already own. The map redraws
+     * hundreds of hexes per frame, so reusing one path avoids hundreds of
+     * throw-away objects every time the camera moves.
+     */
+    public static void writeHexPath(Path2D.Double path, double cx, double cy, double size) {
         double w = Math.sqrt(3) / 2.0 * size; // half-width
         double h = size;                       // half-height (centre to tip)
 
-        Path2D.Double path = new Path2D.Double();
+        path.reset();
         path.moveTo(cx, cy - h);       // top
         path.lineTo(cx + w, cy - h / 2); // top-right
         path.lineTo(cx + w, cy + h / 2); // bottom-right
@@ -74,7 +85,6 @@ public final class HexGeometry {
         path.lineTo(cx - w, cy + h / 2); // bottom-left
         path.lineTo(cx - w, cy - h / 2); // top-left
         path.closePath();
-        return path;
     }
 
     /** Nearest hex under a world-pixel point, or {-1, -1} if none. */

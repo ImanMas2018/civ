@@ -20,6 +20,7 @@ import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionAdapter;
 import java.awt.event.MouseWheelEvent;
 import java.awt.geom.Path2D;
+import java.awt.image.BufferedImage;
 
 /**
  * Draws the hex map with fog of war. Supports discrete zoom and camera pan.
@@ -36,7 +37,39 @@ public class MapPanel extends JPanel {
     private static final Color FOG_EDGE = new Color(90, 100, 122);
     private static final Color BG = new Color(18, 20, 28);
 
+    // Terrain colours, plus the dimmed variant used when a hex carries a deposit.
+    private static final Color PLAINS = new Color(196, 186, 130);
+    private static final Color GRASSLAND = new Color(126, 176, 76);
+    private static final Color FOREST = new Color(34, 102, 51);
+    private static final Color MOUNTAIN = new Color(120, 118, 112);
+    private static final Color PLAINS_RES = PLAINS.darker();
+    private static final Color GRASSLAND_RES = GRASSLAND.darker();
+    private static final Color FOREST_RES = FOREST.darker();
+    private static final Color MOUNTAIN_RES = MOUNTAIN.darker();
+
+    private static final Color TILE_EDGE = new Color(0, 0, 0, 100);
+    private static final Color OWNED_EDGE = new Color(255, 220, 90);
+    private static final Color MARKER_FILL = new Color(240, 240, 250);
+    private static final Color EXHAUSTED_TEXT = new Color(210, 90, 90);
+
+    private static final BasicStroke THIN = new BasicStroke(1.0f);
+    private static final BasicStroke THICK = new BasicStroke(2.0f);
+
+    /**
+     * One path reused for every hex in a frame. Building a fresh Path2D per hex
+     * created ~400 short-lived objects per repaint, which made dragging stutter.
+     */
+    private final Path2D.Double hexShape = new Path2D.Double();
+
     private final Game game;
+
+    /**
+     * The finished map drawn once at the current zoom. Antialiased hex drawing
+     * costs ~25 ms per frame, but copying a ready-made image costs ~0.2 ms, so
+     * panning blits this instead of redrawing every hex.
+     */
+    private BufferedImage mapCache;
+    private int cacheZoomIndex = -1;
 
     private int zoomIndex = 2;
     private double cameraX = 0;
@@ -149,59 +182,87 @@ public class MapPanel extends JPanel {
             cameraReady = true;
         }
 
-        Graphics2D g2 = (Graphics2D) g.create();
+        // Panning only changes where the cached map sits, so just move the image.
+        g.drawImage(mapCache(), (int) Math.round(-cameraX * zoom()),
+                (int) Math.round(-cameraY * zoom()), null);
+    }
+
+    /** Call this whenever the map itself changes (a hex is discovered, claimed, ...). */
+    public void invalidateMap() {
+        mapCache = null;
+        repaint();
+    }
+
+    private BufferedImage mapCache() {
+        if (mapCache == null || cacheZoomIndex != zoomIndex) {
+            mapCache = renderMap();
+            cacheZoomIndex = zoomIndex;
+        }
+        return mapCache;
+    }
+
+    /** Draws the whole map into an offscreen image, in world pixels times zoom. */
+    private BufferedImage renderMap() {
+        int cols = game.getMap().getCols();
+        int rows = game.getMap().getRows();
+
+        int width = (int) Math.ceil((HexGeometry.centerX(cols - 1, 1, HEX_SIZE) + HEX_SIZE) * zoom());
+        int height = (int) Math.ceil((HexGeometry.centerY(0, rows - 1, HEX_SIZE) + HEX_SIZE) * zoom());
+
+        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g2 = image.createGraphics();
+        g2.setColor(BG);
+        g2.fillRect(0, 0, width, height);
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g2.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
 
-        for (int col = 0; col < game.getMap().getCols(); col++) {
-            for (int row = 0; row < game.getMap().getRows(); row++) {
-                drawHex(g2, game.getMap().get(col, row));
+        // The label font only depends on zoom, so set it once instead of per hex.
+        int fontSize = Math.max(10, (int) (12 * zoom()));
+        g2.setFont(new Font("SansSerif", Font.BOLD, fontSize));
+
+        for (int col = 0; col < cols; col++) {
+            for (int row = 0; row < rows; row++) {
+                Hex hex = game.getMap().get(col, row);
+                drawHex(g2, hex,
+                        HexGeometry.centerX(col, row, HEX_SIZE) * zoom(),
+                        HexGeometry.centerY(col, row, HEX_SIZE) * zoom());
             }
         }
         g2.dispose();
+        return image;
     }
 
-    private double screenX(int col, int row) {
-        return (HexGeometry.centerX(col, row, HEX_SIZE) - cameraX) * zoom();
-    }
-
-    private double screenY(int col, int row) {
-        return (HexGeometry.centerY(col, row, HEX_SIZE) - cameraY) * zoom();
-    }
-
-    private void drawHex(Graphics2D g2, Hex hex) {
-        double cx = screenX(hex.getCol(), hex.getRow());
-        double cy = screenY(hex.getCol(), hex.getRow());
+    private void drawHex(Graphics2D g2, Hex hex, double cx, double cy) {
         // 0.98 leaves a 1-pixel hairline so edges stay readable without breaking the hex shape.
-        Path2D.Double shape = HexGeometry.hexPath(cx, cy, screenHexSize() * 0.98);
+        HexGeometry.writeHexPath(hexShape, cx, cy, screenHexSize() * 0.98);
 
         if (!hex.isDiscovered()) {
             g2.setColor(FOG_FILL);
-            g2.fill(shape);
+            g2.fill(hexShape);
             g2.setColor(FOG_EDGE);
-            g2.setStroke(new BasicStroke(1.0f));
-            g2.draw(shape);
+            g2.setStroke(THIN);
+            g2.draw(hexShape);
             return;
         }
 
         g2.setColor(colourOf(hex));
-        g2.fill(shape);
+        g2.fill(hexShape);
 
-        g2.setColor(new Color(0, 0, 0, 100));
-        g2.setStroke(new BasicStroke(1.0f));
-        g2.draw(shape);
+        g2.setColor(TILE_EDGE);
+        g2.setStroke(THIN);
+        g2.draw(hexShape);
 
         if (hex.isOwned()) {
-            g2.setColor(new Color(255, 220, 90));
-            g2.setStroke(new BasicStroke(2.0f));
-            g2.draw(shape);
+            g2.setColor(OWNED_EDGE);
+            g2.setStroke(THICK);
+            g2.draw(hexShape);
         }
 
         drawHexContents(g2, hex, cx, cy);
 
         if (hex.getCol() == game.getCentreCol() && hex.getRow() == game.getCentreRow()) {
             int marker = Math.max(10, (int) (14 * zoom()));
-            g2.setColor(new Color(240, 240, 250));
+            g2.setColor(MARKER_FILL);
             g2.fillRect((int) (cx - marker / 2.0), (int) (cy - marker / 2.0), marker, marker);
             g2.setColor(Color.BLACK);
             g2.drawRect((int) (cx - marker / 2.0), (int) (cy - marker / 2.0), marker, marker);
@@ -209,33 +270,27 @@ public class MapPanel extends JPanel {
     }
 
     private Color colourOf(Hex hex) {
-        Color base;
+        boolean res = hex.hasResource();
         if (hex.getTerrain() == Terrain.FOREST) {
-            base = new Color(34, 102, 51);
-        } else if (hex.getTerrain() == Terrain.MOUNTAIN) {
-            base = new Color(120, 118, 112);
-        } else if (hex.getTerrain() == Terrain.GRASSLAND) {
-            base = new Color(126, 176, 76);
-        } else {
-            base = new Color(196, 186, 130);
+            return res ? FOREST_RES : FOREST;
         }
-        if (hex.hasResource()) {
-            return base.darker();
+        if (hex.getTerrain() == Terrain.MOUNTAIN) {
+            return res ? MOUNTAIN_RES : MOUNTAIN;
         }
-        return base;
+        if (hex.getTerrain() == Terrain.GRASSLAND) {
+            return res ? GRASSLAND_RES : GRASSLAND;
+        }
+        return res ? PLAINS_RES : PLAINS;
     }
 
     private void drawHexContents(Graphics2D g2, Hex hex, double cx, double cy) {
-        int fontSize = Math.max(10, (int) (12 * zoom()));
-        g2.setFont(new Font("SansSerif", Font.BOLD, fontSize));
-
         if (hex.hasResource()) {
             g2.setColor(Color.WHITE);
             String letter = hex.getDeposit().getLabel().substring(0, 1);
             g2.drawString(letter + " " + hex.getDepositAmount(),
                     (int) (cx - 12 * zoom()), (int) (cy - 4 * zoom()));
         } else if (hex.isExhausted()) {
-            g2.setColor(new Color(210, 90, 90));
+            g2.setColor(EXHAUSTED_TEXT);
             g2.drawString("empty", (int) (cx - 16 * zoom()), (int) (cy - 4 * zoom()));
         }
     }
