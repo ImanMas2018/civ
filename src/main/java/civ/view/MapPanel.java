@@ -54,8 +54,9 @@ public class MapPanel extends JPanel {
     private static final Color OWNED_EDGE = new Color(255, 220, 90);
     private static final Color MARKER_FILL = new Color(240, 240, 250);
     private static final Color EXHAUSTED_TEXT = new Color(210, 90, 90);
-    private static final Color MOVE_FILL = new Color(255, 255, 255, 70);
-    private static final Color MOVE_EDGE = new Color(220, 240, 255);
+    private static final Color MOVE_FILL = new Color(40, 190, 255, 110);
+    private static final Color MOVE_EDGE = new Color(20, 230, 255);
+    private static final BasicStroke HIGHLIGHT = new BasicStroke(3.0f);
     private static final Color UNIT_FILL = new Color(70, 120, 220);
     private static final Color UNIT_SELECTED = Color.WHITE;
 
@@ -69,6 +70,13 @@ public class MapPanel extends JPanel {
 
     private BufferedImage mapCache;
     private int cacheZoomIndex = -1;
+
+    /**
+     * Scratch image the size of the panel. Everything is composed here and
+     * copied across in one blit, because translucent fills painted straight
+     * onto the window came out as partial rectangles on Linux.
+     */
+    private BufferedImage frame;
 
     private int zoomIndex = 2;
     private double cameraX = 0;
@@ -238,7 +246,10 @@ public class MapPanel extends JPanel {
             cameraReady = true;
         }
 
-        Graphics2D g2 = (Graphics2D) g.create();
+        BufferedImage target = frame();
+        Graphics2D g2 = target.createGraphics();
+        g2.setColor(BG);
+        g2.fillRect(0, 0, target.getWidth(), target.getHeight());
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g2.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
 
@@ -252,6 +263,17 @@ public class MapPanel extends JPanel {
             drawUnit(g2, unit);
         }
         g2.dispose();
+
+        g.drawImage(target, 0, 0, null);
+    }
+
+    private BufferedImage frame() {
+        int width = Math.max(1, getWidth());
+        int height = Math.max(1, getHeight());
+        if (frame == null || frame.getWidth() != width || frame.getHeight() != height) {
+            frame = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        }
+        return frame;
     }
 
     /** Call this whenever the map itself changes (a hex is discovered, claimed, ...). */
@@ -380,13 +402,14 @@ public class MapPanel extends JPanel {
             if (!game.canMove(selected, neighbour)) {
                 continue;
             }
-            double cx = screenX(neighbour.getCol(), neighbour.getRow());
-            double cy = screenY(neighbour.getCol(), neighbour.getRow());
-            HexGeometry.writeHexPath(hexShape, cx, cy, screenHexSize() * 0.98);
+            HexGeometry.writeHexPath(hexShape,
+                    screenX(neighbour.getCol(), neighbour.getRow()),
+                    screenY(neighbour.getCol(), neighbour.getRow()),
+                    screenHexSize() * 0.94);
             g2.setColor(MOVE_FILL);
             g2.fill(hexShape);
             g2.setColor(MOVE_EDGE);
-            g2.setStroke(THICK);
+            g2.setStroke(HIGHLIGHT);
             g2.draw(hexShape);
         }
     }
