@@ -1,0 +1,55 @@
+package civ.controller;
+
+import civ.model.Game;
+import civ.model.Hex;
+import civ.model.Unit;
+import civ.view.ActionPanel;
+import civ.view.MapPanel;
+
+/**
+ * Glue between clicks and the model. Every method asks the model to do something,
+ * then tells the view to redraw. No game rules live here.
+ */
+public class GameController {
+
+    private final Game game;
+    private final MapPanel mapPanel;
+    private final ActionPanel actionPanel;
+
+    public GameController(Game game, MapPanel mapPanel, ActionPanel actionPanel) {
+        this.game = game;
+        this.mapPanel = mapPanel;
+        this.actionPanel = actionPanel;
+    }
+
+    public void refresh() {
+        actionPanel.refresh();
+        mapPanel.repaint();
+    }
+
+    public void onHexClicked(Hex hex) {
+        if (mapPanel.isAnimating()) {
+            return;
+        }
+
+        Unit unitOnHex = game.unitAt(hex);
+        Unit selected = game.getSelected();
+
+        if (selected != null && game.canMove(selected, hex)) {
+            int oldCol = selected.getCol();
+            int oldRow = selected.getRow();
+            game.moveUnit(selected, hex);
+            mapPanel.invalidateMap();
+            mapPanel.animateMove(selected, oldCol, oldRow);
+            refresh();
+            return;
+        }
+
+        if (unitOnHex != null) {
+            game.select(unitOnHex);
+        } else {
+            game.select(null);
+        }
+        refresh();
+    }
+}
