@@ -44,8 +44,10 @@ public class MapGenerator {
                 animals ? 60 + random.nextInt(30) : 0);
     }
 
+    /** A forest on the starting border, so a mill can be built before border expansion. */
     private void guaranteeForestNear(GameMap map, int centreCol, int centreRow) {
-        for (Hex hex : map.withinRange(map.get(centreCol, centreRow), 2)) {
+        Hex centre = map.get(centreCol, centreRow);
+        for (Hex hex : map.neighbours(centre)) {
             if (hex.getTerrain() == Terrain.FOREST) {
                 return;
             }

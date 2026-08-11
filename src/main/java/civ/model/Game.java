@@ -1,20 +1,20 @@
 package civ.model;
 
 import civ.util.HexGeometry;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Game state plus the rules the view and controller are allowed to ask.
- * Buildings, the stockpile and the turn cycle arrive in later steps.
+ * The turn cycle (End Turn, queue, starvation) arrives in Step 5.
  */
 public class Game {
 
     private final GameMap map;
+    private final Empire empire = new Empire();
     private final int centreCol;
     private final int centreRow;
-    private final List<Unit> units = new ArrayList<>();
 
+    private int turn = 1;
     private Unit selected;
 
     public Game(long seed) {
@@ -28,6 +28,11 @@ public class Game {
 
     private void setUpStartingPosition() {
         Hex centre = map.get(centreCol, centreRow);
+
+        TownHall townHall = new TownHall(centre);
+        centre.setBuilding(townHall);
+        empire.setTownHall(townHall);
+
         centre.setOwned(true);
         centre.setDiscovered(true);
         List<Hex> ring = map.neighbours(centre);
@@ -36,21 +41,24 @@ public class Game {
             neighbour.setDiscovered(true);
         }
 
-        // Spread the five starting units so each one can be clicked.
         addUnit(new Explorer(centreCol, centreRow));
         addUnit(new Builder(ring.get(0).getCol(), ring.get(0).getRow()));
         addUnit(new Builder(ring.get(1).getCol(), ring.get(1).getRow()));
         addUnit(new Worker(ring.get(2).getCol(), ring.get(2).getRow()));
         addUnit(new Worker(ring.get(3).getCol(), ring.get(3).getRow()));
+
+        empire.getStock().add(ResourceType.FOOD, 40);
+        empire.getStock().add(ResourceType.WOOD, 40);
+        empire.getStock().add(ResourceType.STONE, 20);
     }
 
     public void addUnit(Unit unit) {
-        units.add(unit);
+        empire.getUnits().add(unit);
         revealAround(unit);
     }
 
     public void removeUnit(Unit unit) {
-        units.remove(unit);
+        empire.getUnits().remove(unit);
         if (selected == unit) {
             selected = null;
         }
@@ -58,6 +66,10 @@ public class Game {
 
     public GameMap getMap() {
         return map;
+    }
+
+    public Empire getEmpire() {
+        return empire;
     }
 
     public int getCentreCol() {
@@ -68,8 +80,12 @@ public class Game {
         return centreRow;
     }
 
+    public int getTurn() {
+        return turn;
+    }
+
     public List<Unit> getUnits() {
-        return units;
+        return empire.getUnits();
     }
 
     public Unit getSelected() {
@@ -81,7 +97,7 @@ public class Game {
     }
 
     public Unit unitAt(Hex hex) {
-        for (Unit unit : units) {
+        for (Unit unit : empire.getUnits()) {
             if (unit.isOn(hex)) {
                 return unit;
             }
@@ -93,10 +109,6 @@ public class Game {
         return map.get(unit.getCol(), unit.getRow());
     }
 
-    /**
-     * One step onto an empty neighbour, if the unit can afford the terrain cost.
-     * Cost lives on {@link Terrain}, not on the unit.
-     */
     public boolean canMove(Unit unit, Hex target) {
         if (unit == null || target == null) {
             return false;
@@ -118,6 +130,62 @@ public class Game {
         return unit.canSpend(target.getTerrain().getMoveCost());
     }
 
+    public boolean canBuild(Builder builder, BuildingType type, Hex hex) {
+        if (builder == null || hex == null) {
+            return false;
+        }
+        if (!builder.hasCharge()) {
+            return false;
+        }
+        if (!builder.isOn(hex)) {
+            return false;
+        }
+        if (!hex.isOwned()) {
+            return false;
+        }
+        if (hex.getBuilding() != null) {
+            return false;
+        }
+        if (!builder.canSpend(type.getApCost())) {
+            return false;
+        }
+        if (type.getRequiredTech() != null && !empire.hasTech(type.getRequiredTech())) {
+            return false;
+        }
+        if (type.getRequiredTerrain() != null && hex.getTerrain() != type.getRequiredTerrain()) {
+            return false;
+        }
+        if (type == BuildingType.SETTLEMENT) {
+            if (hex.hasResource()) {
+                return false;
+            }
+        } else if (type.getRequiredDeposit() != null) {
+            if (hex.getDeposit() != type.getRequiredDeposit() || !hex.hasResource()) {
+                return false;
+            }
+        }
+        return empire.getStock().canPay(type.getWoodCost(), type.getStoneCost(), type.getIronCost());
+    }
+
+    public boolean canStation(Worker worker) {
+        if (worker == null || worker.isBusy()) {
+            return false;
+        }
+        Hex hex = hexOf(worker);
+        Building building = hex.getBuilding();
+        if (!(building instanceof ProductionBuilding)) {
+            return false;
+        }
+        ProductionBuilding production = (ProductionBuilding) building;
+        if (production.getType().getProduces() == null) {
+            return false;
+        }
+        if (!production.hasRoom()) {
+            return false;
+        }
+        return worker.canSpend(1);
+    }
+
     public void moveUnit(Unit unit, Hex target) {
         if (!canMove(unit, target)) {
             return;
@@ -127,7 +195,44 @@ public class Game {
         revealAround(unit);
     }
 
-    /** Fog is removed forever — nothing in the program ever sets discovered back to false. */
+    public void build(Builder builder, BuildingType type, Hex hex) {
+        if (!canBuild(builder, type, hex)) {
+            return;
+        }
+
+        empire.getStock().pay(type.getWoodCost(), type.getStoneCost(), type.getIronCost());
+        builder.spend(type.getApCost());
+
+        ProductionBuilding building = new ProductionBuilding(type, hex);
+        hex.setBuilding(building);
+        empire.getBuildings().add(building);
+
+        if (type == BuildingType.SETTLEMENT) {
+            empire.raiseUnitCap(5);
+        }
+
+        builder.useCharge();
+        if (!builder.hasCharge()) {
+            removeUnit(builder);
+        }
+    }
+
+    public void station(Worker worker) {
+        if (!canStation(worker)) {
+            return;
+        }
+        ProductionBuilding building = (ProductionBuilding) hexOf(worker).getBuilding();
+        worker.spend(1);
+        building.addWorker(worker);
+    }
+
+    public void unstation(Worker worker) {
+        if (worker.getStation() == null) {
+            return;
+        }
+        worker.getStation().removeWorker(worker);
+    }
+
     public void revealAround(Unit unit) {
         Hex centre = hexOf(unit);
         if (centre == null) {

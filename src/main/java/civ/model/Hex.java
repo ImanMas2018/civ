@@ -11,6 +11,7 @@ public class Hex {
 
     private boolean discovered = false;
     private boolean owned = false;
+    private Building building;
 
     public Hex(int col, int row, Terrain terrain, ResourceType deposit, int depositAmount) {
         this.col = col;
@@ -66,5 +67,13 @@ public class Hex {
 
     public void setOwned(boolean owned) {
         this.owned = owned;
+    }
+
+    public Building getBuilding() {
+        return building;
+    }
+
+    public void setBuilding(Building building) {
+        this.building = building;
     }
 }
