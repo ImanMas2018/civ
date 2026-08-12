@@ -1,9 +1,13 @@
 package civ.controller;
 
+import civ.model.Builder;
+import civ.model.BuildingType;
 import civ.model.Game;
 import civ.model.Hex;
 import civ.model.Unit;
+import civ.model.Worker;
 import civ.view.ActionPanel;
+import civ.view.HudPanel;
 import civ.view.MapPanel;
 
 /**
@@ -14,15 +18,18 @@ public class GameController {
 
     private final Game game;
     private final MapPanel mapPanel;
+    private final HudPanel hudPanel;
     private final ActionPanel actionPanel;
 
-    public GameController(Game game, MapPanel mapPanel, ActionPanel actionPanel) {
+    public GameController(Game game, MapPanel mapPanel, HudPanel hudPanel, ActionPanel actionPanel) {
         this.game = game;
         this.mapPanel = mapPanel;
+        this.hudPanel = hudPanel;
         this.actionPanel = actionPanel;
     }
 
     public void refresh() {
+        hudPanel.refresh();
         actionPanel.refresh();
         mapPanel.repaint();
     }
@@ -50,6 +57,24 @@ public class GameController {
         } else {
             game.select(null);
         }
+        refresh();
+    }
+
+    public void build(Builder builder, BuildingType type) {
+        game.build(builder, type, game.hexOf(builder));
+        mapPanel.invalidateMap();
+        refresh();
+    }
+
+    public void station(Worker worker) {
+        game.station(worker);
+        mapPanel.invalidateMap();
+        refresh();
+    }
+
+    public void unstation(Worker worker) {
+        game.unstation(worker);
+        mapPanel.invalidateMap();
         refresh();
     }
 }

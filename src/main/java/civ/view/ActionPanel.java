@@ -1,13 +1,15 @@
 package civ.view;
 
+import civ.controller.GameController;
 import civ.model.Builder;
-import civ.model.Explorer;
+import civ.model.BuildingType;
 import civ.model.Game;
 import civ.model.Unit;
 import civ.model.Worker;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
+import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import java.awt.Color;
@@ -15,8 +17,8 @@ import java.awt.Dimension;
 import java.awt.Font;
 
 /**
- * Side panel for the selected unit. Step 3 only shows info; build/station
- * buttons arrive in Step 4 once those actions exist.
+ * Side panel for the selected unit. Illegal actions are greyed out with a tooltip
+ * that says why — the player never clicks something that then fails.
  */
 public class ActionPanel extends JPanel {
 
@@ -25,6 +27,7 @@ public class ActionPanel extends JPanel {
     private static final Color BODY = new Color(180, 190, 210);
 
     private final Game game;
+    private GameController controller;
 
     public ActionPanel(Game game) {
         this.game = game;
@@ -32,6 +35,10 @@ public class ActionPanel extends JPanel {
         setBackground(BG);
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
         setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+    }
+
+    public void setController(GameController controller) {
+        this.controller = controller;
     }
 
     public void refresh() {
@@ -44,12 +51,35 @@ public class ActionPanel extends JPanel {
             addBody("Click empty ground to deselect.");
         } else {
             addTitle(selected.describe());
-            addBody("Vision  " + selected.getVisionRadius()
-                    + "    AP cost is paid by the terrain.");
-            add(Box.createVerticalStrut(10));
-            addTitle("Abilities");
-            for (String line : abilityLines(selected)) {
-                addBody(line);
+            addBody("Vision  " + selected.getVisionRadius());
+
+            if (selected instanceof Builder) {
+                Builder builder = (Builder) selected;
+                add(Box.createVerticalStrut(8));
+                addTitle("Build here");
+                for (BuildingType type : BuildingType.values()) {
+                    if (type == BuildingType.TOWN_HALL) {
+                        continue;
+                    }
+                    boolean allowed = game.canBuild(builder, type, game.hexOf(builder));
+                    addButton(type.getLabel() + "  (" + type.getWoodCost() + "w "
+                                    + type.getStoneCost() + "s)",
+                            allowed,
+                            reasonWhyNot(builder, type),
+                            () -> controller.build(builder, type));
+                }
+            }
+
+            if (selected instanceof Worker) {
+                Worker worker = (Worker) selected;
+                add(Box.createVerticalStrut(8));
+                addTitle("Worker");
+                addButton("Station in building", game.canStation(worker),
+                        "Stand on a finished building that still has a free worker slot.",
+                        () -> controller.station(worker));
+                addButton("Leave building", worker.getStation() != null,
+                        "This worker is not stationed anywhere.",
+                        () -> controller.unstation(worker));
             }
         }
 
@@ -57,27 +87,25 @@ public class ActionPanel extends JPanel {
         repaint();
     }
 
-    private String[] abilityLines(Unit unit) {
-        if (unit instanceof Explorer) {
-            return new String[] {
-                    "Scout — largest vision (3 hexes).",
-                    "Most action points (6)."
-            };
+    private String reasonWhyNot(Builder builder, BuildingType type) {
+        if (!builder.hasCharge()) {
+            return "This builder has no charges left.";
         }
-        if (unit instanceof Builder) {
-            Builder builder = (Builder) unit;
-            return new String[] {
-                    "Will be able to build structures.",
-                    "Build charges left: " + builder.getCharges() + "/3."
-            };
+        if (!game.hexOf(builder).isOwned()) {
+            return "This hex is outside your border.";
         }
-        if (unit instanceof Worker) {
-            return new String[] {
-                    "Will be able to station in a building.",
-                    "Currently idle."
-            };
+        if (game.hexOf(builder).getBuilding() != null) {
+            return "This hex already has a building.";
         }
-        return new String[] { "No special ability yet." };
+        if (type.getRequiredTech() != null
+                && !game.getEmpire().hasTech(type.getRequiredTech())) {
+            return "Needs the technology: " + type.getRequiredTech().getLabel();
+        }
+        if (type.getRequiredTerrain() != null
+                && game.hexOf(builder).getTerrain() != type.getRequiredTerrain()) {
+            return "Needs terrain: " + type.getRequiredTerrain().getLabel();
+        }
+        return "The deposit, AP or resources are not enough.";
     }
 
     private void addTitle(String text) {
@@ -95,6 +123,19 @@ public class ActionPanel extends JPanel {
         label.setFont(new Font("SansSerif", Font.PLAIN, 12));
         label.setAlignmentX(LEFT_ALIGNMENT);
         add(label);
+        add(Box.createVerticalStrut(4));
+    }
+
+    private void addButton(String text, boolean enabled, String reason, Runnable action) {
+        JButton button = new JButton(text);
+        button.setEnabled(enabled);
+        button.setAlignmentX(LEFT_ALIGNMENT);
+        button.setMaximumSize(new Dimension(226, 30));
+        if (!enabled) {
+            button.setToolTipText(reason);
+        }
+        button.addActionListener(e -> action.run());
+        add(button);
         add(Box.createVerticalStrut(4));
     }
 }

@@ -1,8 +1,11 @@
 package civ.view;
 
 import civ.controller.GameController;
+import civ.model.Building;
+import civ.model.BuildingType;
 import civ.model.Game;
 import civ.model.Hex;
+import civ.model.ProductionBuilding;
 import civ.model.Terrain;
 import civ.model.Unit;
 import civ.util.HexGeometry;
@@ -345,14 +348,6 @@ public class MapPanel extends JPanel {
         }
 
         drawHexContents(g2, hex, cx, cy);
-
-        if (hex.getCol() == game.getCentreCol() && hex.getRow() == game.getCentreRow()) {
-            int marker = Math.max(10, (int) (14 * zoom()));
-            g2.setColor(MARKER_FILL);
-            g2.fillRect((int) (cx - marker / 2.0), (int) (cy - marker / 2.0), marker, marker);
-            g2.setColor(Color.BLACK);
-            g2.drawRect((int) (cx - marker / 2.0), (int) (cy - marker / 2.0), marker, marker);
-        }
     }
 
     private Color colourOf(Hex hex) {
@@ -378,6 +373,25 @@ public class MapPanel extends JPanel {
         } else if (hex.isExhausted()) {
             g2.setColor(EXHAUSTED_TEXT);
             g2.drawString("empty", (int) (cx - 16 * zoom()), (int) (cy - 4 * zoom()));
+        }
+
+        Building building = hex.getBuilding();
+        if (building == null) {
+            return;
+        }
+        int size = Math.max(10, (int) (16 * zoom()));
+        g2.setColor(building.getType() == BuildingType.TOWN_HALL
+                ? MARKER_FILL
+                : new Color(200, 160, 100));
+        g2.fillRect((int) (cx - size / 2.0), (int) (cy - size / 2.0), size, size);
+        g2.setColor(Color.BLACK);
+        g2.drawRect((int) (cx - size / 2.0), (int) (cy - size / 2.0), size, size);
+
+        if (building instanceof ProductionBuilding) {
+            ProductionBuilding production = (ProductionBuilding) building;
+            g2.setColor(Color.WHITE);
+            g2.drawString(production.getWorkers().size() + "/" + production.getType().getWorkerCapacity(),
+                    (int) (cx - 8 * zoom()), (int) (cy + 18 * zoom()));
         }
     }
 
