@@ -1,11 +1,12 @@
 package civ.model;
 
 import civ.util.HexGeometry;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Game state plus the rules the view and controller are allowed to ask.
- * The turn cycle (End Turn, queue, starvation) arrives in Step 5.
+ * End Turn itself lives in {@link TurnEngine}.
  */
 public class Game {
 
@@ -16,6 +17,8 @@ public class Game {
 
     private int turn = 1;
     private Unit selected;
+    private boolean starving = false;
+    private final List<String> log = new ArrayList<>();
 
     public Game(long seed) {
         this.map = new GameMap(22, 18);
@@ -84,6 +87,26 @@ public class Game {
         return turn;
     }
 
+    public void nextTurn() {
+        turn++;
+    }
+
+    public boolean isStarving() {
+        return starving;
+    }
+
+    public void setStarving(boolean starving) {
+        this.starving = starving;
+    }
+
+    public List<String> getLog() {
+        return log;
+    }
+
+    public void addLog(String message) {
+        log.add("Turn " + turn + ": " + message);
+    }
+
     public List<Unit> getUnits() {
         return empire.getUnits();
     }
@@ -97,12 +120,31 @@ public class Game {
     }
 
     public Unit unitAt(Hex hex) {
+        List<Unit> here = unitsAt(hex);
+        return here.isEmpty() ? null : here.get(0);
+    }
+
+    public List<Unit> unitsAt(Hex hex) {
+        List<Unit> result = new ArrayList<>();
         for (Unit unit : empire.getUnits()) {
             if (unit.isOn(hex)) {
-                return unit;
+                result.add(unit);
             }
         }
-        return null;
+        return result;
+    }
+
+    /** Next unit on this hex, wrapping around. Used to click-cycle a stack. */
+    public Unit nextUnitOn(Hex hex, Unit current) {
+        List<Unit> here = unitsAt(hex);
+        if (here.isEmpty()) {
+            return null;
+        }
+        int index = here.indexOf(current);
+        if (index < 0) {
+            return here.get(0);
+        }
+        return here.get((index + 1) % here.size());
     }
 
     public Hex hexOf(Unit unit) {
@@ -114,9 +156,6 @@ public class Game {
             return false;
         }
         if (unit.isBusy()) {
-            return false;
-        }
-        if (unitAt(target) != null) {
             return false;
         }
 
@@ -186,6 +225,37 @@ public class Game {
         return worker.canSpend(1);
     }
 
+    public boolean canExpandBorder(BorderExpander expander, Hex hex) {
+        if (expander == null || hex == null) {
+            return false;
+        }
+        return hex.isDiscovered();
+    }
+
+    public boolean canTrain(UnitBlueprint blueprint) {
+        if (empire.getTownHall().isBusy()) {
+            return false;
+        }
+        if (empire.isAtUnitCap()) {
+            return false;
+        }
+        return empire.getStock().canPay(ResourceType.FOOD, blueprint.getFoodCost())
+                && empire.getStock().canPay(ResourceType.WOOD, blueprint.getWoodCost());
+    }
+
+    public boolean canResearch(Tech tech) {
+        return !empire.getTownHall().isBusy() && empire.canResearch(tech);
+    }
+
+    public boolean hasIdleUnitWithAp() {
+        for (Unit unit : empire.getUnits()) {
+            if (!unit.isBusy() && unit.getAp() > 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public void moveUnit(Unit unit, Hex target) {
         if (!canMove(unit, target)) {
             return;
@@ -231,6 +301,56 @@ public class Game {
             return;
         }
         worker.getStation().removeWorker(worker);
+    }
+
+    public void expandBorder(BorderExpander expander, Hex hex) {
+        if (!canExpandBorder(expander, hex)) {
+            return;
+        }
+        hex.setOwned(true);
+        hex.setDiscovered(true);
+        for (Hex neighbour : map.neighbours(hex)) {
+            neighbour.setOwned(true);
+            neighbour.setDiscovered(true);
+        }
+        removeUnit(expander);
+        addLog("The border was expanded and the Border Expander was consumed.");
+    }
+
+    public void train(UnitBlueprint blueprint) {
+        if (!canTrain(blueprint)) {
+            return;
+        }
+
+        empire.getStock().add(ResourceType.FOOD, -blueprint.getFoodCost());
+        empire.getStock().add(ResourceType.WOOD, -blueprint.getWoodCost());
+
+        Hex home = empire.getTownHall().getHex();
+        List<Hex> ring = map.neighbours(home);
+        final Hex spawn = ring.isEmpty() ? home : ring.get(0);
+
+        empire.getTownHall().setOrder(new ProductionOrder(
+                "Training " + blueprint.getLabel(),
+                blueprint.getTurns(),
+                () -> {
+                    addUnit(blueprint.create(spawn.getCol(), spawn.getRow()));
+                    addLog(blueprint.getLabel() + " is ready.");
+                }));
+    }
+
+    public void research(Tech tech) {
+        if (!canResearch(tech)) {
+            return;
+        }
+
+        empire.getStock().pay(tech.getWoodCost(), tech.getStoneCost(), tech.getIronCost());
+        empire.getTownHall().setOrder(new ProductionOrder(
+                tech.getLabel(),
+                tech.getTurns(),
+                () -> {
+                    empire.addTech(tech);
+                    addLog(tech.getLabel() + " finished.");
+                }));
     }
 
     public void revealAround(Unit unit) {
