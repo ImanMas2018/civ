@@ -3,7 +3,9 @@ package civ.view;
 import civ.controller.GameController;
 import civ.model.Game;
 import javax.swing.JPanel;
+import javax.swing.JScrollPane;
 import java.awt.BorderLayout;
+import java.awt.Dimension;
 
 /** Puts the HUD, map and action panel together, then wires the controller. */
 public class GameScreen extends JPanel {
@@ -22,7 +24,12 @@ public class GameScreen extends JPanel {
 
         add(hudPanel, BorderLayout.NORTH);
         add(mapPanel, BorderLayout.CENTER);
-        add(actionPanel, BorderLayout.EAST);
+
+        JScrollPane actions = new JScrollPane(actionPanel);
+        actions.setPreferredSize(new Dimension(260, 0));
+        actions.setBorder(null);
+        actions.getVerticalScrollBar().setUnitIncrement(16);
+        add(actions, BorderLayout.EAST);
 
         controller.refresh();
     }

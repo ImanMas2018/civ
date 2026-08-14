@@ -3,18 +3,18 @@ package civ.view;
 import civ.controller.GameController;
 import civ.model.Empire;
 import civ.model.Game;
+import civ.model.ProductionOrder;
 import civ.model.ResourceType;
+import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import java.awt.Color;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.util.List;
 import java.util.Map;
 
-/**
- * Permanent top bar: turn, resources as current/capacity plus net rate, unit cap.
- * End Turn and the Town Hall queue arrive in Step 5.
- */
+/** Permanent top bar: turn, resources, unit cap, queue, starvation, End Turn. */
 public class HudPanel extends JPanel {
 
     private static final Color BG = new Color(24, 28, 36);
@@ -22,29 +22,45 @@ public class HudPanel extends JPanel {
     private static final Color NEGATIVE = new Color(255, 110, 110);
 
     private final Game game;
+    private GameController controller;
 
     private final JLabel turnLabel = new JLabel();
     private final JLabel unitsLabel = new JLabel();
+    private final JLabel queueLabel = new JLabel();
+    private final JLabel warningLabel = new JLabel();
+    private final JLabel logLabel = new JLabel();
     private final JPanel resourcePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 14, 4));
+    private final JButton endTurnButton = new JButton("End Turn");
 
     public HudPanel(Game game) {
         this.game = game;
         setLayout(new FlowLayout(FlowLayout.LEFT, 16, 6));
         setBackground(BG);
 
-        turnLabel.setForeground(TEXT);
-        unitsLabel.setForeground(TEXT);
-        turnLabel.setFont(new Font("SansSerif", Font.PLAIN, 13));
-        unitsLabel.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        for (JLabel label : new JLabel[] {turnLabel, unitsLabel, queueLabel, warningLabel, logLabel}) {
+            label.setForeground(TEXT);
+            label.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        }
+        warningLabel.setFont(new Font("SansSerif", Font.BOLD, 13));
         resourcePanel.setOpaque(false);
+
+        endTurnButton.addActionListener(e -> {
+            if (controller != null) {
+                controller.endTurn();
+            }
+        });
 
         add(turnLabel);
         add(resourcePanel);
         add(unitsLabel);
+        add(queueLabel);
+        add(warningLabel);
+        add(logLabel);
+        add(endTurnButton);
     }
 
     public void setController(GameController controller) {
-        // End Turn is wired here in Step 5.
+        this.controller = controller;
     }
 
     public void refresh() {
@@ -68,7 +84,23 @@ public class HudPanel extends JPanel {
         unitsLabel.setText("Units " + empire.getUnits().size() + "/" + empire.getUnitCap()
                 + "  (E" + empire.countUnits("Explorer")
                 + " B" + empire.countUnits("Builder")
-                + " W" + empire.countUnits("Worker") + ")");
+                + " W" + empire.countUnits("Worker")
+                + " X" + empire.countUnits("Border Expander") + ")");
+
+        ProductionOrder order = empire.getTownHall().getOrder();
+        queueLabel.setText(order == null
+                ? "Town Hall: idle"
+                : order.getLabel() + " — " + order.getTurnsLeft() + " turns left");
+
+        if (game.isStarving()) {
+            warningLabel.setText("STARVATION!");
+            warningLabel.setForeground(NEGATIVE);
+        } else {
+            warningLabel.setText("");
+        }
+
+        List<String> log = game.getLog();
+        logLabel.setText(log.isEmpty() ? "" : log.get(log.size() - 1));
 
         revalidate();
         repaint();

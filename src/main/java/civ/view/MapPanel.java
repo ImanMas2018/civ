@@ -262,8 +262,14 @@ public class MapPanel extends JPanel {
                 null);
 
         drawMoveHighlights(g2);
+        Unit selected = game.getSelected();
         for (Unit unit : game.getUnits()) {
-            drawUnit(g2, unit);
+            if (unit != selected) {
+                drawUnit(g2, unit);
+            }
+        }
+        if (selected != null) {
+            drawUnit(g2, selected);
         }
         g2.dispose();
 
@@ -437,6 +443,18 @@ public class MapPanel extends JPanel {
             double sy = screenY(fromCol, fromRow);
             cx = sx + (cx - sx) * progress;
             cy = sy + (cy - sy) * progress;
+        } else {
+            int stackIndex = 0;
+            for (Unit other : game.getUnits()) {
+                if (other.getCol() == unit.getCol() && other.getRow() == unit.getRow()) {
+                    if (other == unit) {
+                        break;
+                    }
+                    stackIndex++;
+                }
+            }
+            cx += stackIndex * 8 * zoom();
+            cy += stackIndex * 6 * zoom();
         }
 
         int radius = Math.max(8, (int) (12 * zoom()));

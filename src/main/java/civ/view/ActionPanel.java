@@ -1,10 +1,13 @@
 package civ.view;
 
 import civ.controller.GameController;
+import civ.model.BorderExpander;
 import civ.model.Builder;
 import civ.model.BuildingType;
 import civ.model.Game;
+import civ.model.Tech;
 import civ.model.Unit;
+import civ.model.UnitBlueprint;
 import civ.model.Worker;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -81,6 +84,30 @@ public class ActionPanel extends JPanel {
                         "This worker is not stationed anywhere.",
                         () -> controller.unstation(worker));
             }
+
+            if (selected instanceof BorderExpander) {
+                add(Box.createVerticalStrut(8));
+                addTitle("Border Expander");
+                addBody("Click a discovered hex to claim it and its 6 neighbours. The unit is then consumed.");
+            }
+        }
+
+        add(Box.createVerticalStrut(12));
+        addTitle("Town Hall");
+        for (UnitBlueprint blueprint : UnitBlueprint.values()) {
+            addButton("Train " + blueprint.getLabel() + " (" + blueprint.getTurns() + "t)",
+                    game.canTrain(blueprint),
+                    "Town Hall busy, unit cap reached, or not enough food/wood.",
+                    () -> controller.train(blueprint));
+        }
+        for (Tech tech : Tech.values()) {
+            if (game.getEmpire().hasTech(tech)) {
+                continue;
+            }
+            addButton("Research " + tech.getLabel(),
+                    game.canResearch(tech),
+                    "Town Hall busy, prerequisite missing, or not enough resources.",
+                    () -> controller.research(tech));
         }
 
         revalidate();
