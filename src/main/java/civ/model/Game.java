@@ -50,9 +50,10 @@ public class Game {
         addUnit(new Worker(ring.get(2).getCol(), ring.get(2).getRow()));
         addUnit(new Worker(ring.get(3).getCol(), ring.get(3).getRow()));
 
-        empire.getStock().add(ResourceType.FOOD, 40);
-        empire.getStock().add(ResourceType.WOOD, 40);
-        empire.getStock().add(ResourceType.STONE, 20);
+        empire.getStock().add(ResourceType.FOOD, 80);
+        empire.getStock().add(ResourceType.WOOD, 60);
+        empire.getStock().add(ResourceType.STONE, 30);
+        empire.getStock().add(ResourceType.IRON, 10);
     }
 
     public void addUnit(Unit unit) {

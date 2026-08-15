@@ -27,7 +27,7 @@ public abstract class Unit {
         return typeName;
     }
 
-    /** First letter drawn on the map (E, B, W, ...). */
+    /** Letter drawn on the map (E, B, W, X). */
     public String getLetter() {
         return typeName.substring(0, 1);
     }

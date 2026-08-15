@@ -1,6 +1,7 @@
 package civ.view;
 
 import civ.controller.GameController;
+import civ.model.BorderExpander;
 import civ.model.Building;
 import civ.model.BuildingType;
 import civ.model.Game;
@@ -59,6 +60,8 @@ public class MapPanel extends JPanel {
     private static final Color EXHAUSTED_TEXT = new Color(210, 90, 90);
     private static final Color MOVE_FILL = new Color(40, 190, 255, 110);
     private static final Color MOVE_EDGE = new Color(20, 230, 255);
+    private static final Color EXPAND_FILL = new Color(255, 200, 60, 90);
+    private static final Color EXPAND_EDGE = new Color(255, 220, 90);
     private static final BasicStroke HIGHLIGHT = new BasicStroke(3.0f);
     private static final Color UNIT_FILL = new Color(70, 120, 220);
     private static final Color UNIT_SELECTED = Color.WHITE;
@@ -262,6 +265,7 @@ public class MapPanel extends JPanel {
                 null);
 
         drawMoveHighlights(g2);
+        drawExpandHighlights(g2);
         Unit selected = game.getSelected();
         for (Unit unit : game.getUnits()) {
             if (unit != selected) {
@@ -414,6 +418,9 @@ public class MapPanel extends JPanel {
         if (selected == null || movingUnit != null) {
             return;
         }
+        if (selected instanceof BorderExpander) {
+            return;
+        }
         Hex here = game.hexOf(selected);
         if (here == null) {
             return;
@@ -422,16 +429,42 @@ public class MapPanel extends JPanel {
             if (!game.canMove(selected, neighbour)) {
                 continue;
             }
-            HexGeometry.writeHexPath(hexShape,
-                    screenX(neighbour.getCol(), neighbour.getRow()),
-                    screenY(neighbour.getCol(), neighbour.getRow()),
-                    screenHexSize() * 0.94);
-            g2.setColor(MOVE_FILL);
-            g2.fill(hexShape);
-            g2.setColor(MOVE_EDGE);
-            g2.setStroke(HIGHLIGHT);
-            g2.draw(hexShape);
+            paintHighlight(g2, neighbour, MOVE_FILL, MOVE_EDGE);
         }
+    }
+
+    /**
+     * A Border Expander claims any discovered hex, not just its neighbours.
+     * Those 6 cyan tiles were walk-steps, which made the ability look tiny.
+     */
+    private void drawExpandHighlights(Graphics2D g2) {
+        Unit selected = game.getSelected();
+        if (!(selected instanceof BorderExpander) || movingUnit != null) {
+            return;
+        }
+        BorderExpander expander = (BorderExpander) selected;
+        int cols = game.getMap().getCols();
+        int rows = game.getMap().getRows();
+        for (int col = 0; col < cols; col++) {
+            for (int row = 0; row < rows; row++) {
+                Hex hex = game.getMap().get(col, row);
+                if (game.canExpandBorder(expander, hex)) {
+                    paintHighlight(g2, hex, EXPAND_FILL, EXPAND_EDGE);
+                }
+            }
+        }
+    }
+
+    private void paintHighlight(Graphics2D g2, Hex hex, Color fill, Color edge) {
+        HexGeometry.writeHexPath(hexShape,
+                screenX(hex.getCol(), hex.getRow()),
+                screenY(hex.getCol(), hex.getRow()),
+                screenHexSize() * 0.94);
+        g2.setColor(fill);
+        g2.fill(hexShape);
+        g2.setColor(edge);
+        g2.setStroke(HIGHLIGHT);
+        g2.draw(hexShape);
     }
 
     private void drawUnit(Graphics2D g2, Unit unit) {

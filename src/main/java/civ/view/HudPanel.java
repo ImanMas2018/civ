@@ -8,6 +8,7 @@ import civ.model.ResourceType;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -34,7 +35,7 @@ public class HudPanel extends JPanel {
 
     public HudPanel(Game game) {
         this.game = game;
-        setLayout(new FlowLayout(FlowLayout.LEFT, 16, 6));
+        setLayout(new BorderLayout(8, 0));
         setBackground(BG);
 
         for (JLabel label : new JLabel[] {turnLabel, unitsLabel, queueLabel, warningLabel, logLabel}) {
@@ -50,13 +51,25 @@ public class HudPanel extends JPanel {
             }
         });
 
-        add(turnLabel);
-        add(resourcePanel);
-        add(unitsLabel);
-        add(queueLabel);
-        add(warningLabel);
-        add(logLabel);
-        add(endTurnButton);
+        JPanel stats = new JPanel(new FlowLayout(FlowLayout.LEFT, 16, 6));
+        stats.setOpaque(false);
+        stats.add(turnLabel);
+        stats.add(resourcePanel);
+        stats.add(unitsLabel);
+        stats.add(queueLabel);
+        stats.add(warningLabel);
+
+        JPanel buttonBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 6));
+        buttonBar.setOpaque(false);
+        buttonBar.add(endTurnButton);
+
+        JPanel logBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 16, 4));
+        logBar.setOpaque(false);
+        logBar.add(logLabel);
+
+        add(stats, BorderLayout.CENTER);
+        add(buttonBar, BorderLayout.EAST);
+        add(logBar, BorderLayout.SOUTH);
     }
 
     public void setController(GameController controller) {

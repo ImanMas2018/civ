@@ -3,7 +3,7 @@ package civ.model;
 import civ.util.HexGeometry;
 import java.util.Random;
 
-/** Fills a GameMap with terrain and resource deposits. Guarantees wood near the start. */
+/** Fills a GameMap with terrain and resource deposits. Guarantees wood and food near the start. */
 public class MapGenerator {
 
     private final Random random;
@@ -19,6 +19,7 @@ public class MapGenerator {
             }
         }
         guaranteeForestNear(map, centreCol, centreRow);
+        guaranteeFarmNear(map, centreCol, centreRow);
     }
 
     private Hex createHex(int col, int row) {
@@ -55,6 +56,23 @@ public class MapGenerator {
         int[] spot = HexGeometry.neighbour(centreCol, centreRow, 0);
         if (map.inside(spot[0], spot[1])) {
             map.set(new Hex(spot[0], spot[1], Terrain.FOREST, ResourceType.WOOD, 80));
+        }
+    }
+
+    /** A farmable grassland on the starting border, so food is not a dead end. */
+    private void guaranteeFarmNear(GameMap map, int centreCol, int centreRow) {
+        Hex centre = map.get(centreCol, centreRow);
+        for (Hex hex : map.neighbours(centre)) {
+            if (hex.getTerrain() == Terrain.GRASSLAND && hex.hasResource()
+                    && hex.getDeposit() == ResourceType.FOOD) {
+                return;
+            }
+        }
+        for (Hex hex : map.neighbours(centre)) {
+            if (hex.getTerrain() != Terrain.FOREST) {
+                map.set(new Hex(hex.getCol(), hex.getRow(), Terrain.GRASSLAND, ResourceType.FOOD, 100));
+                return;
+            }
         }
     }
 }
