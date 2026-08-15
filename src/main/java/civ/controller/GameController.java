@@ -110,6 +110,11 @@ public class GameController {
         refresh();
     }
 
+    public void upgradeTownHall() {
+        game.upgradeTownHall();
+        refresh();
+    }
+
     public void endTurn() {
         if (game.hasIdleUnitWithAp()) {
             int answer = JOptionPane.showConfirmDialog(

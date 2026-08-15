@@ -4,6 +4,7 @@ import civ.controller.GameController;
 import civ.model.Empire;
 import civ.model.Game;
 import civ.model.ResourceType;
+import civ.model.TownHall;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -27,6 +28,7 @@ public class HudPanel extends JPanel {
     private final JLabel turnLabel = new JLabel();
     private final JLabel unitsLabel = new JLabel();
     private final JLabel queueLabel = new JLabel();
+    private final JLabel townHallLabel = new JLabel();
     private final JLabel warningLabel = new JLabel();
     private final JLabel logLabel = new JLabel();
     private final JPanel resourcePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 14, 4));
@@ -39,7 +41,7 @@ public class HudPanel extends JPanel {
         setLayout(new BorderLayout(8, 0));
         setBackground(BG);
 
-        for (JLabel label : new JLabel[] {turnLabel, unitsLabel, queueLabel, warningLabel, logLabel}) {
+        for (JLabel label : new JLabel[] {turnLabel, unitsLabel, queueLabel, townHallLabel, warningLabel, logLabel}) {
             label.setForeground(TEXT);
             label.setFont(new Font("SansSerif", Font.PLAIN, 13));
         }
@@ -62,6 +64,7 @@ public class HudPanel extends JPanel {
         stats.add(turnLabel);
         stats.add(resourcePanel);
         stats.add(unitsLabel);
+        stats.add(townHallLabel);
         stats.add(queueLabel);
         stats.add(warningLabel);
 
@@ -109,9 +112,14 @@ public class HudPanel extends JPanel {
                 + "  (E" + empire.countUnits("Explorer")
                 + " B" + empire.countUnits("Builder")
                 + " W" + empire.countUnits("Worker")
-                + " X" + empire.countUnits("Border Expander") + ")");
+                + " X" + empire.countUnits("Border Expander")
+                + " A" + empire.countUnits("Archer") + ")");
 
-        queueLabel.setText(empire.getTownHall().describeQueue());
+        TownHall townHall = empire.getTownHall();
+        townHallLabel.setText(townHall.describeLevel()
+                + "  HP " + townHall.getHp() + "/" + townHall.getMaxHp());
+
+        queueLabel.setText(townHall.describeQueue());
 
         if (game.isStarving()) {
             warningLabel.setText("STARVATION!");

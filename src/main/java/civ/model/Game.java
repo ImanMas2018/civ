@@ -2,6 +2,7 @@ package civ.model;
 
 import civ.model.command.ResearchTechCommand;
 import civ.model.command.TrainUnitCommand;
+import civ.model.command.UpgradeTownHallCommand;
 import civ.model.event.EventBus;
 import civ.model.factory.BuildingFactory;
 import civ.model.factory.UnitFactory;
@@ -212,6 +213,9 @@ public class Game {
         if (type.getRequiredTech() != null && !empire.hasTech(type.getRequiredTech())) {
             return false;
         }
+        if (type.getRequiredLevel() > empire.getTownHall().getLevel()) {
+            return false;
+        }
         if (type.getRequiredTerrain() != null && hex.getTerrain() != type.getRequiredTerrain()) {
             return false;
         }
@@ -262,6 +266,17 @@ public class Game {
 
     public boolean canResearch(Tech tech) {
         return !empire.getTownHall().isBusy() && empire.canResearch(tech);
+    }
+
+    public boolean canUpgradeTownHall() {
+        if (empire.getTownHall().isBusy()) {
+            return false;
+        }
+        TownHallLevel next = empire.getTownHall().getRank().next();
+        if (next == null) {
+            return false;
+        }
+        return empire.getStock().canPay(next.getWoodCost(), next.getStoneCost(), next.getIronCost());
     }
 
     public boolean hasIdleUnitWithAp() {
@@ -345,6 +360,14 @@ public class Game {
             return;
         }
         empire.getTownHall().start(new ResearchTechCommand(tech), this);
+    }
+
+    public void upgradeTownHall() {
+        if (!canUpgradeTownHall()) {
+            return;
+        }
+        TownHallLevel next = empire.getTownHall().getRank().next();
+        empire.getTownHall().start(new UpgradeTownHallCommand(next), this);
     }
 
     public void cancelTownHallOrder() {

@@ -10,7 +10,7 @@ import java.util.Set;
 /** Everything the player owns: stockpile, units, buildings, researched techs. */
 public class Empire {
 
-    private final Stockpile stock = new Stockpile(200);
+    private final Stockpile stock = new Stockpile(100);
     private final List<Unit> units = new ArrayList<>();
     private final List<Building> buildings = new ArrayList<>();
     private final Set<Tech> techs = EnumSet.noneOf(Tech.class);
@@ -56,6 +56,9 @@ public class Empire {
         if (tech == Tech.STORAGE_1 || tech == Tech.STORAGE_2) {
             stock.setCapacity(stock.getCapacity() + 100);
         }
+        if (tech == Tech.DEFENSIVE_ARCHITECTURE && townHall != null) {
+            townHall.applyDefensiveArchitecture();
+        }
     }
 
     public boolean canResearch(Tech tech) {
@@ -63,6 +66,9 @@ public class Empire {
             return false;
         }
         if (tech.getRequired() != null && !hasTech(tech.getRequired())) {
+            return false;
+        }
+        if (townHall != null && tech.getRequiredLevel() > townHall.getLevel()) {
             return false;
         }
         return stock.canPay(tech.getWoodCost(), tech.getStoneCost(), tech.getIronCost());

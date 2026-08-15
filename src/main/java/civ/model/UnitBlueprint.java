@@ -6,21 +6,27 @@ package civ.model;
  */
 public enum UnitBlueprint {
 
-    WORKER("Worker", 10, 0, 2),
-    BUILDER("Builder", 10, 10, 2),
-    EXPLORER("Explorer", 15, 0, 3),
-    BORDER_EXPANDER("Border Expander", 20, 20, 4);
+    WORKER("Worker", 10, 0, 2, false, 1),
+    BUILDER("Builder", 10, 10, 2, false, 1),
+    EXPLORER("Explorer", 15, 0, 3, false, 1),
+    BORDER_EXPANDER("Border Expander", 20, 20, 4, false, 1),
+    ARCHER("Archer", 15, 10, 3, true, 2);
 
     private final String label;
     private final int foodCost;
     private final int woodCost;
     private final int turns;
+    private final boolean military;
+    private final int requiredLevel;
 
-    UnitBlueprint(String label, int foodCost, int woodCost, int turns) {
+    UnitBlueprint(String label, int foodCost, int woodCost, int turns,
+                  boolean military, int requiredLevel) {
         this.label = label;
         this.foodCost = foodCost;
         this.woodCost = woodCost;
         this.turns = turns;
+        this.military = military;
+        this.requiredLevel = requiredLevel;
     }
 
     public String getLabel() {
@@ -40,11 +46,11 @@ public enum UnitBlueprint {
     }
 
     public boolean isMilitary() {
-        return false;
+        return military;
     }
 
     public int getRequiredLevel() {
-        return 1;
+        return requiredLevel;
     }
 
     public Unit create(int col, int row) {
@@ -57,6 +63,8 @@ public enum UnitBlueprint {
                 return new Explorer(col, row);
             case BORDER_EXPANDER:
                 return new BorderExpander(col, row);
+            case ARCHER:
+                return new Archer(col, row);
             default:
                 throw new IllegalStateException("unknown blueprint " + this);
         }

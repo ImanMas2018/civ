@@ -8,6 +8,7 @@ import civ.model.Game;
 import civ.model.Hex;
 import civ.model.ProductionBuilding;
 import civ.model.Terrain;
+import civ.model.TownHall;
 import civ.model.Unit;
 import civ.util.HexGeometry;
 import javax.swing.JPanel;
@@ -354,6 +355,13 @@ public class MapPanel extends JPanel {
         if (hex.isOwned()) {
             g2.setColor(OWNED_EDGE);
             g2.setStroke(THICK);
+            g2.draw(hexShape);
+        }
+
+        Building building = hex.getBuilding();
+        if (building instanceof TownHall && ((TownHall) building).hasDefensiveWall()) {
+            g2.setColor(new Color(110, 110, 118));
+            g2.setStroke(new BasicStroke(5.0f));
             g2.draw(hexShape);
         }
 

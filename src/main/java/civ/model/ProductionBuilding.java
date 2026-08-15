@@ -50,8 +50,8 @@ public class ProductionBuilding extends Building {
 
         boolean isMine = getType() == BuildingType.STONE_MINE
                 || getType() == BuildingType.IRON_MINE;
-        if (isMine && empire.hasTech(Tech.PRO_TOOLS)) {
-            total = (int) (total * 1.5);
+        if (isMine && (empire.hasTech(Tech.STEEL_TOOLS) || empire.hasTech(Tech.PRO_TOOLS))) {
+            total = total * 3 / 2;
         }
 
         return Math.min(total, getHex().getDepositAmount());

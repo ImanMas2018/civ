@@ -9,9 +9,18 @@ import civ.model.command.Command;
  */
 public class TownHall extends Building {
 
+    private static final int START_HP = 200;
+    private static final int START_DEFENCE = 10;
+    private static final int WALL_DEFENCE = 30;
+    private static final int WALL_MAX_HP = 350;
+
     private Command activeCommand;
     private int turnsLeft;
     private int level = 1;
+    private int hp = START_HP;
+    private int maxHp = START_HP;
+    private int defence = START_DEFENCE;
+    private boolean defensiveWall = false;
 
     public TownHall(Hex hex) {
         super(BuildingType.TOWN_HALL, hex);
@@ -19,6 +28,31 @@ public class TownHall extends Building {
 
     public int getLevel() {
         return level;
+    }
+
+    public TownHallLevel getRank() {
+        return TownHallLevel.of(level);
+    }
+
+    public int getHp() {
+        return hp;
+    }
+
+    public int getMaxHp() {
+        return maxHp;
+    }
+
+    public int getDefence() {
+        return defence;
+    }
+
+    public boolean hasDefensiveWall() {
+        return defensiveWall;
+    }
+
+    public String describeLevel() {
+        TownHallLevel rank = getRank();
+        return "Level " + rank.getNumber() + " — " + rank.getLabel();
     }
 
     public boolean isBusy() {
@@ -68,6 +102,29 @@ public class TownHall extends Building {
             return "Town Hall: idle";
         }
         return activeCommand.getLabel() + " — " + turnsLeft + " turns left";
+    }
+
+    /** Apply the instant effects of finishing the next rank. */
+    public void promote(Game game) {
+        TownHallLevel current = getRank();
+        TownHallLevel next = current.next();
+        if (next == null) {
+            return;
+        }
+        int oldStorage = current.getStorage();
+        level = next.getNumber();
+        game.getEmpire().getStock().setCapacity(
+                game.getEmpire().getStock().getCapacity() + (next.getStorage() - oldStorage));
+        if (next.getHeal() > 0) {
+            hp = Math.min(maxHp, hp + next.getHeal());
+        }
+        game.addLog("Town Hall is now a " + next.getLabel() + ".");
+    }
+
+    public void applyDefensiveArchitecture() {
+        defensiveWall = true;
+        defence = WALL_DEFENCE;
+        maxHp = WALL_MAX_HP;
     }
 
     @Override
