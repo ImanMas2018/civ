@@ -32,6 +32,8 @@ public class HudPanel extends JPanel {
     private final JLabel logLabel = new JLabel();
     private final JPanel resourcePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 14, 4));
     private final JButton endTurnButton = new JButton("End Turn");
+    private final JButton backButton = new JButton("Back");
+    private Runnable onMenu;
 
     public HudPanel(Game game) {
         this.game = game;
@@ -50,6 +52,11 @@ public class HudPanel extends JPanel {
                 controller.endTurn();
             }
         });
+        backButton.addActionListener(e -> {
+            if (onMenu != null) {
+                onMenu.run();
+            }
+        });
 
         JPanel stats = new JPanel(new FlowLayout(FlowLayout.LEFT, 16, 6));
         stats.setOpaque(false);
@@ -61,6 +68,7 @@ public class HudPanel extends JPanel {
 
         JPanel buttonBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 6));
         buttonBar.setOpaque(false);
+        buttonBar.add(backButton);
         buttonBar.add(endTurnButton);
 
         JPanel logBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 16, 4));
@@ -74,6 +82,10 @@ public class HudPanel extends JPanel {
 
     public void setController(GameController controller) {
         this.controller = controller;
+    }
+
+    public void setOnMenu(Runnable onMenu) {
+        this.onMenu = onMenu;
     }
 
     public void refresh() {

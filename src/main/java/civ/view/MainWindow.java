@@ -2,9 +2,14 @@ package civ.view;
 
 import civ.model.Game;
 import civ.util.MusicPlayer;
+import javax.swing.AbstractAction;
+import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
+import javax.swing.KeyStroke;
 import java.awt.CardLayout;
+import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
 
 /**
  * Top-level window. Uses CardLayout to switch between menu and game screens.
@@ -28,6 +33,21 @@ public class MainWindow extends JFrame {
 
         music.play("/music.wav");
         music.setVolume(60);
+        installEscapeBack();
+    }
+
+    /** Esc works no matter which panel has focus. */
+    private void installEscapeBack() {
+        getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "back");
+        getRootPane().getActionMap().put("back", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (gameScreen != null && gameScreen.isShowing()) {
+                    gameScreen.goBack();
+                }
+            }
+        });
     }
 
     public MusicPlayer getMusic() {
@@ -42,7 +62,7 @@ public class MainWindow extends JFrame {
             root.remove(gameScreen);
         }
         Game game = new Game(System.currentTimeMillis());
-        gameScreen = new GameScreen(game);
+        gameScreen = new GameScreen(game, this);
         root.add(gameScreen, "game");
         cards.show(root, "game");
     }

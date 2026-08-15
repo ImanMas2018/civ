@@ -3,17 +3,20 @@ package civ.view;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
+import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JSlider;
+import javax.swing.KeyStroke;
 import javax.swing.SwingConstants;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.GridBagLayout;
+import java.awt.event.KeyEvent;
 
 /**
  * Main menu: Start, Settings (music volume), Exit (with confirmation).
@@ -77,6 +80,10 @@ public class MenuPanel extends JPanel {
         dialog.setContentPane(content);
         dialog.setSize(360, 160);
         dialog.setLocationRelativeTo(window);
+        dialog.getRootPane().registerKeyboardAction(
+                e -> dialog.dispose(),
+                KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0),
+                JComponent.WHEN_IN_FOCUSED_WINDOW);
         dialog.setVisible(true);
     }
 
