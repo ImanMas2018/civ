@@ -1,5 +1,6 @@
 package civ.model;
 
+import civ.model.event.GameEvent;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -20,6 +21,10 @@ public class TurnEngine {
 
         game.nextTurn();
         refreshUnits(game, empire);
+
+        // Future systems (tribes, seasons, disasters, autosave) subscribe here.
+        // Do not call them from this class — that would invert the dependency.
+        game.getBus().publish(GameEvent.TURN_ENDED, game);
     }
 
     private void produceResources(Game game, Empire empire) {
@@ -48,14 +53,7 @@ public class TurnEngine {
     }
 
     private void advanceTownHallQueue(Game game, Empire empire) {
-        TownHall townHall = empire.getTownHall();
-        ProductionOrder order = townHall.getOrder();
-        if (order == null) {
-            return;
-        }
-        if (order.tick()) {
-            townHall.clearOrder();
-        }
+        empire.getTownHall().tick(game);
     }
 
     private void payUpkeep(Game game, Empire empire) {

@@ -94,6 +94,12 @@ public class ActionPanel extends JPanel {
 
         add(Box.createVerticalStrut(12));
         addTitle("Town Hall");
+        if (game.getEmpire().getTownHall().isBusy()) {
+            addBody(game.getEmpire().getTownHall().describeQueue());
+            addButton("Cancel order", true,
+                    "Cancel the current Town Hall job. Spent resources are not returned.",
+                    () -> controller.cancelTownHallOrder());
+        }
         for (UnitBlueprint blueprint : UnitBlueprint.values()) {
             addButton("Train " + blueprint.getLabel() + " (" + blueprint.getTurns() + "t)",
                     game.canTrain(blueprint),

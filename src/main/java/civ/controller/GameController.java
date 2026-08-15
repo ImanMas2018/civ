@@ -105,6 +105,11 @@ public class GameController {
         refresh();
     }
 
+    public void cancelTownHallOrder() {
+        game.cancelTownHallOrder();
+        refresh();
+    }
+
     public void endTurn() {
         if (game.hasIdleUnitWithAp()) {
             int answer = JOptionPane.showConfirmDialog(

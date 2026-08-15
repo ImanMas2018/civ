@@ -72,6 +72,21 @@ public class Empire {
         return units.size() >= unitCap;
     }
 
+    public int countMilitary() {
+        int n = 0;
+        for (Unit unit : units) {
+            if (unit.isMilitary()) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /** Follows Town Hall level (5 / 10 / 15). Level 1 until upgrades exist. */
+    public int getMilitaryCap() {
+        return 5 * townHall.getLevel();
+    }
+
     public int countUnits(String typeName) {
         int n = 0;
         for (Unit unit : units) {

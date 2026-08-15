@@ -3,7 +3,6 @@ package civ.view;
 import civ.controller.GameController;
 import civ.model.Empire;
 import civ.model.Game;
-import civ.model.ProductionOrder;
 import civ.model.ResourceType;
 import javax.swing.JButton;
 import javax.swing.JLabel;
@@ -112,10 +111,7 @@ public class HudPanel extends JPanel {
                 + " W" + empire.countUnits("Worker")
                 + " X" + empire.countUnits("Border Expander") + ")");
 
-        ProductionOrder order = empire.getTownHall().getOrder();
-        queueLabel.setText(order == null
-                ? "Town Hall: idle"
-                : order.getLabel() + " — " + order.getTurnsLeft() + " turns left");
+        queueLabel.setText(empire.getTownHall().describeQueue());
 
         if (game.isStarving()) {
             warningLabel.setText("STARVATION!");

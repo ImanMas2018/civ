@@ -1,5 +1,10 @@
 package civ.model;
 
+import civ.model.command.ResearchTechCommand;
+import civ.model.command.TrainUnitCommand;
+import civ.model.event.EventBus;
+import civ.model.factory.BuildingFactory;
+import civ.model.factory.UnitFactory;
 import civ.util.HexGeometry;
 import java.util.ArrayList;
 import java.util.List;
@@ -12,6 +17,9 @@ public class Game {
 
     private final GameMap map;
     private final Empire empire = new Empire();
+    private final EventBus bus = new EventBus();
+    private final UnitFactory unitFactory = new UnitFactory(this);
+    private final BuildingFactory buildingFactory = new BuildingFactory(bus);
     private final int centreCol;
     private final int centreRow;
 
@@ -74,6 +82,18 @@ public class Game {
 
     public Empire getEmpire() {
         return empire;
+    }
+
+    public EventBus getBus() {
+        return bus;
+    }
+
+    public UnitFactory getUnitFactory() {
+        return unitFactory;
+    }
+
+    public BuildingFactory getBuildingFactory() {
+        return buildingFactory;
     }
 
     public int getCentreCol() {
@@ -237,11 +257,7 @@ public class Game {
         if (empire.getTownHall().isBusy()) {
             return false;
         }
-        if (empire.isAtUnitCap()) {
-            return false;
-        }
-        return empire.getStock().canPay(ResourceType.FOOD, blueprint.getFoodCost())
-                && empire.getStock().canPay(ResourceType.WOOD, blueprint.getWoodCost());
+        return unitFactory.canCreate(blueprint);
     }
 
     public boolean canResearch(Tech tech) {
@@ -274,8 +290,7 @@ public class Game {
         empire.getStock().pay(type.getWoodCost(), type.getStoneCost(), type.getIronCost());
         builder.spend(type.getApCost());
 
-        ProductionBuilding building = new ProductionBuilding(type, hex);
-        hex.setBuilding(building);
+        Building building = buildingFactory.create(type, hex);
         empire.getBuildings().add(building);
 
         if (type == BuildingType.SETTLEMENT) {
@@ -322,36 +337,18 @@ public class Game {
         if (!canTrain(blueprint)) {
             return;
         }
-
-        empire.getStock().add(ResourceType.FOOD, -blueprint.getFoodCost());
-        empire.getStock().add(ResourceType.WOOD, -blueprint.getWoodCost());
-
-        Hex home = empire.getTownHall().getHex();
-        List<Hex> ring = map.neighbours(home);
-        final Hex spawn = ring.isEmpty() ? home : ring.get(0);
-
-        empire.getTownHall().setOrder(new ProductionOrder(
-                "Training " + blueprint.getLabel(),
-                blueprint.getTurns(),
-                () -> {
-                    addUnit(blueprint.create(spawn.getCol(), spawn.getRow()));
-                    addLog(blueprint.getLabel() + " is ready.");
-                }));
+        empire.getTownHall().start(new TrainUnitCommand(blueprint), this);
     }
 
     public void research(Tech tech) {
         if (!canResearch(tech)) {
             return;
         }
+        empire.getTownHall().start(new ResearchTechCommand(tech), this);
+    }
 
-        empire.getStock().pay(tech.getWoodCost(), tech.getStoneCost(), tech.getIronCost());
-        empire.getTownHall().setOrder(new ProductionOrder(
-                tech.getLabel(),
-                tech.getTurns(),
-                () -> {
-                    empire.addTech(tech);
-                    addLog(tech.getLabel() + " finished.");
-                }));
+    public void cancelTownHallOrder() {
+        empire.getTownHall().cancelCommand(this);
     }
 
     public void revealAround(Unit unit) {

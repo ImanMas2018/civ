@@ -79,6 +79,10 @@ public abstract class Unit {
         return false;
     }
 
+    public boolean isMilitary() {
+        return false;
+    }
+
     /** One short line for the side panel. Subclasses add their own details. */
     public String describe() {
         return typeName + "  AP " + ap + "/" + maxAp;

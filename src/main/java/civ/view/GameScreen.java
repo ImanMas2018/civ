@@ -2,6 +2,7 @@ package civ.view;
 
 import civ.controller.GameController;
 import civ.model.Game;
+import civ.model.event.GameEvent;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
@@ -29,6 +30,12 @@ public class GameScreen extends JPanel {
         hudPanel.setController(controller);
         actionPanel.setController(controller);
         hudPanel.setOnMenu(this::goBack);
+
+        game.getBus().subscribe(GameEvent.TURN_ENDED, payload -> controller.refresh());
+        game.getBus().subscribe(GameEvent.BUILDING_PLACED, payload -> {
+            mapPanel.invalidateMap();
+            controller.refresh();
+        });
 
         add(hudPanel, BorderLayout.NORTH);
         add(mapPanel, BorderLayout.CENTER);

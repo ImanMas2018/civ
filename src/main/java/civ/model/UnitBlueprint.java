@@ -39,6 +39,14 @@ public enum UnitBlueprint {
         return turns;
     }
 
+    public boolean isMilitary() {
+        return false;
+    }
+
+    public int getRequiredLevel() {
+        return 1;
+    }
+
     public Unit create(int col, int row) {
         switch (this) {
             case WORKER:
