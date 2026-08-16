@@ -41,8 +41,9 @@ public class GameScreen extends JPanel {
         add(mapPanel, BorderLayout.CENTER);
 
         JScrollPane actions = new JScrollPane(actionPanel);
-        actions.setPreferredSize(new Dimension(260, 0));
+        actions.setPreferredSize(new Dimension(300, 0));
         actions.setBorder(null);
+        actions.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         actions.getVerticalScrollBar().setUnitIncrement(16);
         add(actions, BorderLayout.EAST);
 

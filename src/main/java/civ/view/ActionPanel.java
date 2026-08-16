@@ -17,15 +17,20 @@ import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.SwingConstants;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
+import java.awt.Insets;
 
 /**
  * Side panel for the selected unit. Illegal actions are greyed out with a tooltip
  * that says why — the player never clicks something that then fails.
  */
 public class ActionPanel extends JPanel {
+
+    private static final int PANEL_WIDTH = 280;
+    private static final int LABEL_WIDTH = 236;
 
     private static final Color BG = new Color(32, 36, 46);
     private static final Color TITLE = new Color(230, 235, 245);
@@ -36,10 +41,20 @@ public class ActionPanel extends JPanel {
 
     public ActionPanel(Game game) {
         this.game = game;
-        setPreferredSize(new Dimension(250, 0));
         setBackground(BG);
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
         setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+    }
+
+    @Override
+    public Dimension getPreferredSize() {
+        Dimension natural = super.getPreferredSize();
+        return new Dimension(PANEL_WIDTH, natural.height);
+    }
+
+    @Override
+    public Dimension getMinimumSize() {
+        return new Dimension(PANEL_WIDTH, super.getMinimumSize().height);
     }
 
     public void setController(GameController controller) {
@@ -109,7 +124,7 @@ public class ActionPanel extends JPanel {
         TownHallLevel nextRank = townHall.getRank().next();
         if (nextRank != null) {
             addButton("Upgrade to " + nextRank.getLabel()
-                            + " (" + nextRank.getTurns() + "t, "
+                            + "<br>(" + nextRank.getTurns() + "t, "
                             + nextRank.getWoodCost() + "w "
                             + nextRank.getStoneCost() + "s "
                             + nextRank.getIronCost() + "i)",
@@ -198,7 +213,8 @@ public class ActionPanel extends JPanel {
     }
 
     private void addBody(String text) {
-        JLabel label = new JLabel("<html>" + text + "</html>");
+        JLabel label = new JLabel("<html><div style='width:" + LABEL_WIDTH + "px'>"
+                + text + "</div></html>");
         label.setForeground(BODY);
         label.setFont(new Font("SansSerif", Font.PLAIN, 12));
         label.setAlignmentX(LEFT_ALIGNMENT);
@@ -207,10 +223,13 @@ public class ActionPanel extends JPanel {
     }
 
     private void addButton(String text, boolean enabled, String reason, Runnable action) {
-        JButton button = new JButton(text);
+        JButton button = new JButton("<html><div style='text-align:center; width:"
+                + LABEL_WIDTH + "px'>" + text + "</div></html>");
         button.setEnabled(enabled);
         button.setAlignmentX(LEFT_ALIGNMENT);
-        button.setMaximumSize(new Dimension(226, 30));
+        button.setHorizontalAlignment(SwingConstants.CENTER);
+        button.setMargin(new Insets(6, 8, 6, 8));
+        button.setMaximumSize(new Dimension(Integer.MAX_VALUE, 64));
         if (!enabled) {
             button.setToolTipText(reason);
         }
