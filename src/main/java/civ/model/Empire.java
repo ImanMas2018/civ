@@ -10,7 +10,8 @@ import java.util.Set;
 /** Everything the player owns: stockpile, units, buildings, researched techs. */
 public class Empire {
 
-    private final Stockpile stock = new Stockpile(100);
+    // Temporary test stash so upgrades and techs can be tried without grinding.
+    private final Stockpile stock = new Stockpile(9999);
     private final List<Unit> units = new ArrayList<>();
     private final List<Building> buildings = new ArrayList<>();
     private final Set<Tech> techs = EnumSet.noneOf(Tech.class);
