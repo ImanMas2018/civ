@@ -26,6 +26,7 @@ public class Game {
 
     private int turn = 1;
     private Unit selected;
+    private Hex inspected;
     private boolean starving = false;
     private final List<String> log = new ArrayList<>();
 
@@ -141,6 +142,87 @@ public class Game {
         selected = unit;
     }
 
+    public Hex getInspected() {
+        return inspected;
+    }
+
+    public void inspect(Hex hex) {
+        inspected = hex;
+    }
+
+    public String describeInspected() {
+        Hex hex = inspected;
+        if (hex == null) {
+            return "";
+        }
+        StringBuilder text = new StringBuilder();
+        text.append(hex.getTerrain().getLabel());
+        if (!hex.getTerrain().isPassable()) {
+            text.append(" — impassable");
+        } else if (hex.getTerrain().isSea()) {
+            text.append(empire.hasTech(Tech.SEAFARING)
+                    ? " — enter with Seafaring (AP to 0)"
+                    : " — needs Seafaring");
+        } else {
+            text.append(" — move cost ").append(hex.getTerrain().getMoveCost());
+        }
+        if (hex.hasRoad()) {
+            text.append(" — road");
+        }
+        if (isCoastal(hex)) {
+            text.append(" — coast");
+        }
+        if (hex.hasResource()) {
+            String deposit = hex.getTerrain().isSea() ? "Fish" : hex.getDeposit().getLabel();
+            text.append(". ").append(deposit).append(" ").append(hex.getDepositAmount());
+        } else if (hex.isExhausted()) {
+            text.append(". deposit empty");
+        }
+        boolean buildable = hex.getTerrain().isLand() && hex.isOwned() && hex.getBuilding() == null;
+        text.append(buildable ? ". Can build here." : ". Cannot build here.");
+        return text.toString();
+    }
+
+    public boolean isCoastal(Hex hex) {
+        if (hex == null || !hex.getTerrain().isLand()) {
+            return false;
+        }
+        for (Hex neighbour : map.neighbours(hex)) {
+            if (neighbour.getTerrain().isSea()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * AP to step from the unit's hex onto {@code to}. Sea entry spends whatever AP
+     * is left (the unit becomes a boat). Mountain Range is impassable.
+     */
+    public int moveCost(Unit unit, Hex to) {
+        Hex from = hexOf(unit);
+        if (from == null || to == null) {
+            return Integer.MAX_VALUE;
+        }
+        if (!to.getTerrain().isPassable()) {
+            return Integer.MAX_VALUE;
+        }
+        if (to.getTerrain().isSea()) {
+            return Math.max(1, unit.getAp());
+        }
+
+        int cost = to.getTerrain().getMoveCost();
+        if (from.hasRoad() && to.hasRoad()) {
+            cost -= 1;
+        }
+        Edge edge = map.getEdges().find(from, to);
+        if (edge != null && edge.hasRiver()) {
+            boolean bridged = from.hasRoad() && to.hasRoad();
+            cost += bridged ? 0 : 2;
+        }
+        return Math.max(1, cost);
+    }
+
     public Unit unitAt(Hex hex) {
         List<Unit> here = unitsAt(hex);
         return here.isEmpty() ? null : here.get(0);
@@ -187,8 +269,13 @@ public class Game {
         if (distance != 1) {
             return false;
         }
-
-        return unit.canSpend(target.getTerrain().getMoveCost());
+        if (!target.getTerrain().isPassable()) {
+            return false;
+        }
+        if (target.getTerrain().isSea()) {
+            return empire.hasTech(Tech.SEAFARING) && unit.getAp() > 0;
+        }
+        return unit.canSpend(moveCost(unit, target));
     }
 
     public boolean canBuild(Builder builder, BuildingType type, Hex hex) {
@@ -204,7 +291,13 @@ public class Game {
         if (!hex.isOwned()) {
             return false;
         }
+        if (!hex.getTerrain().isLand()) {
+            return false;
+        }
         if (hex.getBuilding() != null) {
+            return false;
+        }
+        if (type == BuildingType.DOCK && !isCoastal(hex)) {
             return false;
         }
         if (!builder.canSpend(type.getApCost())) {
@@ -292,7 +385,13 @@ public class Game {
         if (!canMove(unit, target)) {
             return;
         }
-        unit.spend(target.getTerrain().getMoveCost());
+        if (target.getTerrain().isSea()) {
+            unit.moveTo(target);
+            unit.emptyAp();
+            revealAround(unit);
+            return;
+        }
+        unit.spend(moveCost(unit, target));
         unit.moveTo(target);
         revealAround(unit);
     }

@@ -4,6 +4,7 @@ import civ.controller.GameController;
 import civ.model.BorderExpander;
 import civ.model.Building;
 import civ.model.BuildingType;
+import civ.model.Edge;
 import civ.model.Game;
 import civ.model.Hex;
 import civ.model.ProductionBuilding;
@@ -50,10 +51,16 @@ public class MapPanel extends JPanel {
     private static final Color GRASSLAND = new Color(126, 176, 76);
     private static final Color FOREST = new Color(34, 102, 51);
     private static final Color MOUNTAIN = new Color(120, 118, 112);
+    private static final Color MOUNTAIN_RANGE = new Color(62, 58, 56);
+    private static final Color SEA = new Color(46, 110, 168);
+    private static final Color SEA_FISH = new Color(36, 88, 148);
     private static final Color PLAINS_RES = PLAINS.darker();
     private static final Color GRASSLAND_RES = GRASSLAND.darker();
     private static final Color FOREST_RES = FOREST.darker();
     private static final Color MOUNTAIN_RES = MOUNTAIN.darker();
+    private static final Color RIVER = new Color(70, 160, 210);
+    private static final Color WALL_LINE = new Color(90, 90, 96);
+    private static final Color ROAD = new Color(186, 150, 90);
 
     private static final Color TILE_EDGE = new Color(0, 0, 0, 100);
     private static final Color OWNED_EDGE = new Color(255, 220, 90);
@@ -329,6 +336,7 @@ public class MapPanel extends JPanel {
                         HexGeometry.centerY(col, row, HEX_SIZE) * zoom());
             }
         }
+        drawEdges(g2);
         g2.dispose();
         return image;
     }
@@ -373,8 +381,14 @@ public class MapPanel extends JPanel {
         if (hex.getTerrain() == Terrain.FOREST) {
             return res ? FOREST_RES : FOREST;
         }
+        if (hex.getTerrain() == Terrain.MOUNTAIN_RANGE) {
+            return MOUNTAIN_RANGE;
+        }
         if (hex.getTerrain() == Terrain.MOUNTAIN) {
             return res ? MOUNTAIN_RES : MOUNTAIN;
+        }
+        if (hex.getTerrain() == Terrain.SEA) {
+            return res ? SEA_FISH : SEA;
         }
         if (hex.getTerrain() == Terrain.GRASSLAND) {
             return res ? GRASSLAND_RES : GRASSLAND;
@@ -382,15 +396,70 @@ public class MapPanel extends JPanel {
         return res ? PLAINS_RES : PLAINS;
     }
 
+    private void drawEdges(Graphics2D g2) {
+        for (Edge edge : game.getMap().getEdges().all()) {
+            if (!edge.hasRiver() && !edge.hasWall()) {
+                continue;
+            }
+            Hex a = game.getMap().get(edge.getCol1(), edge.getRow1());
+            Hex b = game.getMap().get(edge.getCol2(), edge.getRow2());
+            if (a == null || b == null) {
+                continue;
+            }
+            if (!a.isDiscovered() && !b.isDiscovered()) {
+                continue;
+            }
+            double x1 = HexGeometry.centerX(a.getCol(), a.getRow(), HEX_SIZE) * zoom();
+            double y1 = HexGeometry.centerY(a.getCol(), a.getRow(), HEX_SIZE) * zoom();
+            double x2 = HexGeometry.centerX(b.getCol(), b.getRow(), HEX_SIZE) * zoom();
+            double y2 = HexGeometry.centerY(b.getCol(), b.getRow(), HEX_SIZE) * zoom();
+            double mx = (x1 + x2) / 2.0;
+            double my = (y1 + y2) / 2.0;
+            double dx = x2 - x1;
+            double dy = y2 - y1;
+            double len = Math.hypot(dx, dy);
+            if (len < 1) {
+                continue;
+            }
+            double half = screenHexSize() * 0.48;
+            double px = -dy / len * half;
+            double py = dx / len * half;
+            int ax = (int) Math.round(mx - px);
+            int ay = (int) Math.round(my - py);
+            int bx = (int) Math.round(mx + px);
+            int by = (int) Math.round(my + py);
+            if (edge.hasRiver()) {
+                g2.setColor(RIVER);
+                g2.setStroke(new BasicStroke(Math.max(3f, (float) (4.5 * zoom())),
+                        BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                g2.drawLine(ax, ay, bx, by);
+            }
+            if (edge.hasWall()) {
+                g2.setColor(WALL_LINE);
+                g2.setStroke(new BasicStroke(Math.max(4f, (float) (6 * zoom())),
+                        BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER));
+                g2.drawLine(ax, ay, bx, by);
+            }
+        }
+    }
+
     private void drawHexContents(Graphics2D g2, Hex hex, double cx, double cy) {
         if (hex.hasResource()) {
             g2.setColor(Color.WHITE);
-            String letter = hex.getDeposit().getLabel().substring(0, 1);
+            String letter = hex.getTerrain().isSea() ? "Fi" : hex.getDeposit().getLabel().substring(0, 1);
             g2.drawString(letter + " " + hex.getDepositAmount(),
                     (int) (cx - 12 * zoom()), (int) (cy - 4 * zoom()));
         } else if (hex.isExhausted()) {
             g2.setColor(EXHAUSTED_TEXT);
             g2.drawString("empty", (int) (cx - 16 * zoom()), (int) (cy - 4 * zoom()));
+        }
+
+        if (hex.hasRoad()) {
+            g2.setColor(ROAD);
+            g2.setStroke(new BasicStroke(Math.max(2f, (float) (3.5 * zoom()))));
+            int r = Math.max(4, (int) (8 * zoom()));
+            g2.drawLine((int) (cx - r), (int) cy, (int) (cx + r), (int) cy);
+            g2.drawLine((int) cx, (int) (cy - r), (int) cx, (int) (cy + r));
         }
 
         Building building = hex.getBuilding();
@@ -500,11 +569,22 @@ public class MapPanel extends JPanel {
 
         int radius = Math.max(8, (int) (12 * zoom()));
         boolean selected = unit == game.getSelected();
-        g2.setColor(selected ? UNIT_SELECTED : UNIT_FILL);
-        g2.fillOval((int) (cx - radius), (int) (cy - radius + 6), radius * 2, radius * 2);
-        g2.setColor(Color.BLACK);
-        g2.setStroke(THIN);
-        g2.drawOval((int) (cx - radius), (int) (cy - radius + 6), radius * 2, radius * 2);
+        Hex tile = game.hexOf(unit);
+        boolean boat = tile != null && tile.getTerrain().isSea();
+        g2.setColor(selected ? UNIT_SELECTED : (boat ? new Color(150, 110, 70) : UNIT_FILL));
+        if (boat) {
+            g2.fillRoundRect((int) (cx - radius), (int) (cy - radius / 2.0 + 6),
+                    radius * 2, radius, radius / 2, radius / 2);
+            g2.setColor(Color.BLACK);
+            g2.setStroke(THIN);
+            g2.drawRoundRect((int) (cx - radius), (int) (cy - radius / 2.0 + 6),
+                    radius * 2, radius, radius / 2, radius / 2);
+        } else {
+            g2.fillOval((int) (cx - radius), (int) (cy - radius + 6), radius * 2, radius * 2);
+            g2.setColor(Color.BLACK);
+            g2.setStroke(THIN);
+            g2.drawOval((int) (cx - radius), (int) (cy - radius + 6), radius * 2, radius * 2);
+        }
 
         g2.setColor(selected ? Color.BLACK : Color.WHITE);
         int fontSize = Math.max(10, (int) (11 * zoom()));

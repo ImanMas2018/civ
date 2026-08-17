@@ -65,10 +65,15 @@ public class ActionPanel extends JPanel {
         removeAll();
 
         Unit selected = game.getSelected();
+        if (game.getInspected() != null) {
+            addTitle("Hex");
+            addBody(game.describeInspected());
+            add(Box.createVerticalStrut(8));
+        }
         if (selected == null) {
             addTitle("Nothing selected");
             addBody("Click a unit on the map.");
-            addBody("Click empty ground to deselect.");
+            addBody("Click a hex to inspect its terrain.");
         } else {
             addTitle(selected.describe());
             addBody("Vision  " + selected.getVisionRadius());

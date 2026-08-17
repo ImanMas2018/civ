@@ -69,6 +69,10 @@ public abstract class Unit {
         ap -= cost;
     }
 
+    public void emptyAp() {
+        ap = 0;
+    }
+
     /** Start of a new turn. During starvation the units are weak, so they get less. */
     public void refresh(int starvationPenalty) {
         ap = Math.max(0, maxAp - starvationPenalty);

@@ -46,6 +46,8 @@ public class GameController {
             return;
         }
 
+        game.inspect(hex);
+
         Unit selected = game.getSelected();
 
         if (selected instanceof BorderExpander
