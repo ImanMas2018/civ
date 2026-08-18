@@ -22,7 +22,7 @@ public class MainWindow extends JFrame {
     private GameScreen gameScreen;
 
     public MainWindow() {
-        setTitle("Civ — Advanced Programming");
+        setTitle("Civ — AP");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(1280, 820);
         setLocationRelativeTo(null);

@@ -5,6 +5,7 @@ import civ.model.Empire;
 import civ.model.Game;
 import civ.model.ResourceType;
 import civ.model.TownHall;
+import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -59,27 +60,36 @@ public class HudPanel extends JPanel {
             }
         });
 
-        JPanel stats = new JPanel(new FlowLayout(FlowLayout.LEFT, 16, 6));
-        stats.setOpaque(false);
-        stats.add(turnLabel);
-        stats.add(resourcePanel);
-        stats.add(unitsLabel);
-        stats.add(townHallLabel);
-        stats.add(queueLabel);
-        stats.add(warningLabel);
+        JPanel row1 = new JPanel(new FlowLayout(FlowLayout.LEFT, 16, 4));
+        row1.setOpaque(false);
+        row1.add(turnLabel);
+        row1.add(resourcePanel);
+        row1.add(unitsLabel);
+
+        JPanel row2 = new JPanel(new FlowLayout(FlowLayout.LEFT, 16, 4));
+        row2.setOpaque(false);
+        row2.add(townHallLabel);
+        row2.add(queueLabel);
+        row2.add(warningLabel);
+
+        JPanel logBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 16, 2));
+        logBar.setOpaque(false);
+        logBar.add(logLabel);
+
+        JPanel left = new JPanel();
+        left.setOpaque(false);
+        left.setLayout(new BoxLayout(left, BoxLayout.Y_AXIS));
+        left.add(row1);
+        left.add(row2);
+        left.add(logBar);
 
         JPanel buttonBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 6));
         buttonBar.setOpaque(false);
         buttonBar.add(backButton);
         buttonBar.add(endTurnButton);
 
-        JPanel logBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 16, 4));
-        logBar.setOpaque(false);
-        logBar.add(logLabel);
-
-        add(stats, BorderLayout.CENTER);
+        add(left, BorderLayout.CENTER);
         add(buttonBar, BorderLayout.EAST);
-        add(logBar, BorderLayout.SOUTH);
     }
 
     public void setController(GameController controller) {
