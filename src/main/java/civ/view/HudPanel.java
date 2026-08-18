@@ -92,7 +92,7 @@ public class HudPanel extends JPanel {
 
     public void refresh() {
         Empire empire = game.getEmpire();
-        Map<ResourceType, Integer> rate = empire.netRatePerTurn();
+        Map<ResourceType, Integer> rate = empire.netRatePerTurn(game.getMap());
 
         turnLabel.setText("Turn " + game.getTurn());
 
@@ -117,7 +117,8 @@ public class HudPanel extends JPanel {
 
         TownHall townHall = empire.getTownHall();
         townHallLabel.setText(townHall.describeLevel()
-                + "  HP " + townHall.getHp() + "/" + townHall.getMaxHp());
+                + "  HP " + townHall.getHp() + "/" + townHall.getMaxHp()
+                + "  Happy " + empire.happiness());
 
         queueLabel.setText(townHall.describeQueue());
 

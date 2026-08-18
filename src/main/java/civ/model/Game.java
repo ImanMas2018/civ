@@ -4,6 +4,7 @@ import civ.model.command.ResearchTechCommand;
 import civ.model.command.TrainUnitCommand;
 import civ.model.command.UpgradeTownHallCommand;
 import civ.model.event.EventBus;
+import civ.model.event.GameEvent;
 import civ.model.factory.BuildingFactory;
 import civ.model.factory.UnitFactory;
 import civ.util.HexGeometry;
@@ -414,6 +415,128 @@ public class Game {
         builder.useCharge();
         if (!builder.hasCharge()) {
             removeUnit(builder);
+        }
+    }
+
+    public boolean canBuildRoad(Builder builder) {
+        Hex hex = hexOf(builder);
+        if (builder == null || hex == null) {
+            return false;
+        }
+        if (!hex.isOwned() || !hex.getTerrain().isLand() || hex.hasRoad()) {
+            return false;
+        }
+        return builder.canSpend(1) && empire.getStock().canPay(ResourceType.WOOD, 8);
+    }
+
+    public void buildRoad(Builder builder) {
+        if (!canBuildRoad(builder)) {
+            return;
+        }
+        empire.getStock().add(ResourceType.WOOD, -8);
+        builder.spend(1);
+        hexOf(builder).setRoad(true);
+        addLog("A road was built.");
+    }
+
+    public boolean canBuildWall(Builder builder, Hex other) {
+        Hex here = hexOf(builder);
+        if (builder == null || here == null || other == null) {
+            return false;
+        }
+        if (HexGeometry.distance(here.getCol(), here.getRow(), other.getCol(), other.getRow()) != 1) {
+            return false;
+        }
+        if (!here.isDiscovered() || !other.isDiscovered()) {
+            return false;
+        }
+        if (!here.isOwned() && !other.isOwned()) {
+            return false;
+        }
+        if (here.getTerrain().isSea() || here.getTerrain().isMountainRange()
+                || other.getTerrain().isSea() || other.getTerrain().isMountainRange()) {
+            return false;
+        }
+        Edge edge = map.getEdges().getOrCreate(here, other);
+        if (edge.hasWall()) {
+            return false;
+        }
+        return builder.canSpend(1)
+                && empire.getStock().canPay(15, 20, 0);
+    }
+
+    public void buildWall(Builder builder, Hex other) {
+        if (!canBuildWall(builder, other)) {
+            return;
+        }
+        empire.getStock().pay(15, 20, 0);
+        builder.spend(1);
+        map.getEdges().getOrCreate(hexOf(builder), other).setWall(new Wall());
+        addLog("A wall was raised.");
+    }
+
+    public boolean canDemolish(Builder builder, Hex hex) {
+        if (builder == null || hex == null) {
+            return false;
+        }
+        Hex here = hexOf(builder);
+        int distance = HexGeometry.distance(here.getCol(), here.getRow(), hex.getCol(), hex.getRow());
+        if (distance > 1) {
+            return false;
+        }
+        if (!builder.canSpend(1)) {
+            return false;
+        }
+        Building building = hex.getBuilding();
+        if (building instanceof TownHall) {
+            return false;
+        }
+        boolean hasBuilding = building != null && hex.isOwned();
+        return hasBuilding || hex.hasRoad();
+    }
+
+    public void demolish(Builder builder, Hex hex) {
+        if (!canDemolish(builder, hex)) {
+            return;
+        }
+        builder.spend(1);
+        Building building = hex.getBuilding();
+        if (building != null && !(building instanceof TownHall)) {
+            if (building instanceof ProductionBuilding) {
+                ((ProductionBuilding) building).releaseAllWorkers();
+            }
+            hex.setBuilding(null);
+            empire.getBuildings().remove(building);
+            bus.publish(GameEvent.BUILDING_DESTROYED, building);
+            addLog("The " + building.getType().getLabel() + " was demolished. Resources are lost.");
+        }
+        if (hex.hasRoad()) {
+            hex.setRoad(false);
+            addLog("The road was demolished.");
+        }
+    }
+
+    public boolean canDemolishWall(Builder builder, Hex other) {
+        Hex here = hexOf(builder);
+        if (here == null || other == null) {
+            return false;
+        }
+        if (HexGeometry.distance(here.getCol(), here.getRow(), other.getCol(), other.getRow()) != 1) {
+            return false;
+        }
+        Edge edge = map.getEdges().find(here, other);
+        return edge != null && edge.hasWall() && builder.canSpend(1);
+    }
+
+    public void demolishWall(Builder builder, Hex other) {
+        if (!canDemolishWall(builder, other)) {
+            return;
+        }
+        builder.spend(1);
+        Edge edge = map.getEdges().find(hexOf(builder), other);
+        if (edge != null) {
+            edge.setWall(null);
+            addLog("The wall was demolished.");
         }
     }
 

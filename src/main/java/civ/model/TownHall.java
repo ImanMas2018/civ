@@ -128,7 +128,7 @@ public class TownHall extends Building {
     }
 
     @Override
-    public int outputPerTurn(Empire empire) {
+    public int outputPerTurn(Empire empire, GameMap map) {
         return 0;
     }
 }

@@ -37,18 +37,33 @@ public class TurnEngine {
                 continue;
             }
 
-            int amount = building.outputPerTurn(empire);
+            int amount = building.outputPerTurn(empire, game.getMap());
             if (amount <= 0) {
                 continue;
             }
 
-            building.getHex().takeResource(amount);
+            if (building.getType() == BuildingType.DOCK) {
+                Adjacency.takeFish(building.getHex(), game.getMap(), amount);
+                if (Adjacency.availableFish(building.getHex(), game.getMap()) <= 0
+                        && building instanceof ProductionBuilding) {
+                    ((ProductionBuilding) building).releaseAllWorkers();
+                    game.addLog("The Dock has no more fish nearby.");
+                }
+            } else {
+                building.getHex().takeResource(amount - Adjacency.extraOutput(building, game.getMap()));
+            }
             empire.getStock().add(output, amount);
 
-            if (building.getHex().isExhausted() && building instanceof ProductionBuilding) {
+            if (building.getHex().isExhausted() && building instanceof ProductionBuilding
+                    && building.getType() != BuildingType.DOCK) {
                 ((ProductionBuilding) building).releaseAllWorkers();
                 game.addLog("The " + building.getType().getLabel() + " ran out of resources.");
             }
+        }
+
+        int farmBonus = Adjacency.farmPairs(empire, game.getMap());
+        if (farmBonus > 0) {
+            empire.getStock().add(ResourceType.FOOD, farmBonus);
         }
     }
 

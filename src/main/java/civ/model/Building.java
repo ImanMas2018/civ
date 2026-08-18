@@ -37,5 +37,5 @@ public abstract class Building {
     }
 
     /** How much of {@code getType().getProduces()} this building makes this turn. */
-    public abstract int outputPerTurn(Empire empire);
+    public abstract int outputPerTurn(Empire empire, GameMap map);
 }

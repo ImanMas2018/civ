@@ -2,6 +2,7 @@ package civ.view;
 
 import civ.controller.GameController;
 import civ.model.BorderExpander;
+import civ.model.Builder;
 import civ.model.Building;
 import civ.model.BuildingType;
 import civ.model.Edge;
@@ -274,6 +275,7 @@ public class MapPanel extends JPanel {
 
         drawMoveHighlights(g2);
         drawExpandHighlights(g2);
+        drawWallPickHighlights(g2);
         Unit selected = game.getSelected();
         for (Unit unit : game.getUnits()) {
             if (unit != selected) {
@@ -479,6 +481,32 @@ public class MapPanel extends JPanel {
             g2.setColor(Color.WHITE);
             g2.drawString(production.getWorkers().size() + "/" + production.getType().getWorkerCapacity(),
                     (int) (cx - 8 * zoom()), (int) (cy + 18 * zoom()));
+        }
+    }
+
+    private void drawWallPickHighlights(Graphics2D g2) {
+        if (controller == null || game.getSelected() == null) {
+            return;
+        }
+        if (!controller.isPlacingWall() && !controller.isDemolishingWall()) {
+            return;
+        }
+        Unit selected = game.getSelected();
+        if (!(selected instanceof Builder)) {
+            return;
+        }
+        Builder builder = (Builder) selected;
+        Hex here = game.hexOf(builder);
+        if (here == null) {
+            return;
+        }
+        for (Hex neighbour : game.getMap().neighbours(here)) {
+            boolean ok = controller.isPlacingWall()
+                    ? game.canBuildWall(builder, neighbour)
+                    : game.canDemolishWall(builder, neighbour);
+            if (ok) {
+                paintHighlight(g2, neighbour, EXPAND_FILL, EXPAND_EDGE);
+            }
         }
     }
 

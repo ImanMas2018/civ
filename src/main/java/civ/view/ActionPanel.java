@@ -5,6 +5,7 @@ import civ.model.BorderExpander;
 import civ.model.Builder;
 import civ.model.BuildingType;
 import civ.model.Game;
+import civ.model.Hex;
 import civ.model.Tech;
 import civ.model.TownHall;
 import civ.model.TownHallLevel;
@@ -82,6 +83,14 @@ public class ActionPanel extends JPanel {
                 Builder builder = (Builder) selected;
                 add(Box.createVerticalStrut(8));
                 addTitle("Build here");
+                addButton("Road  (8w)",
+                        game.canBuildRoad(builder),
+                        "Needs owned land, 1 AP and 8 wood. Not on an existing road.",
+                        () -> controller.buildRoad(builder));
+                addButton("Wall — click a neighbour (15w 20s)",
+                        builder.canSpend(1),
+                        "Spend 1 AP after you pick the edge. Not on sea or mountain range.",
+                        () -> controller.startPlaceWall());
                 for (BuildingType type : BuildingType.values()) {
                     if (type == BuildingType.TOWN_HALL) {
                         continue;
@@ -93,6 +102,16 @@ public class ActionPanel extends JPanel {
                             reasonWhyNot(builder, type),
                             () -> controller.build(builder, type));
                 }
+                Hex demolishHex = game.getInspected() != null
+                        ? game.getInspected() : game.hexOf(builder);
+                addButton("Demolish building/road here",
+                        game.canDemolish(builder, demolishHex),
+                        "Stand on or next to your building or road. Town Hall cannot be demolished.",
+                        () -> controller.demolish(builder, demolishHex));
+                addButton("Demolish wall — click a neighbour",
+                        builder.canSpend(1),
+                        "Click the hex on the other side of the wall.",
+                        () -> controller.startDemolishWall());
             }
 
             if (selected instanceof Worker) {
@@ -164,8 +183,14 @@ public class ActionPanel extends JPanel {
         if (!game.hexOf(builder).isOwned()) {
             return "This hex is outside your border.";
         }
+        if (!game.hexOf(builder).getTerrain().isLand()) {
+            return "Cannot build on sea or mountain range.";
+        }
         if (game.hexOf(builder).getBuilding() != null) {
             return "This hex already has a building.";
+        }
+        if (type == BuildingType.DOCK && !game.isCoastal(game.hexOf(builder))) {
+            return "A Dock needs a coastal land hex (next to sea).";
         }
         if (type.getRequiredTech() != null
                 && !game.getEmpire().hasTech(type.getRequiredTech())) {

@@ -108,7 +108,7 @@ public class Empire {
      * What the HUD shows as "+3 per turn". Recomputed from scratch every time
      * it is asked, so it can never drift out of sync with reality.
      */
-    public Map<ResourceType, Integer> netRatePerTurn() {
+    public Map<ResourceType, Integer> netRatePerTurn(GameMap map) {
         Map<ResourceType, Integer> rate = new EnumMap<>(ResourceType.class);
         for (ResourceType type : ResourceType.values()) {
             rate.put(type, 0);
@@ -120,7 +120,7 @@ public class Empire {
         for (Building building : buildings) {
             ResourceType out = building.getType().getProduces();
             if (out != null) {
-                rate.put(out, rate.get(out) + building.outputPerTurn(this));
+                rate.put(out, rate.get(out) + building.outputPerTurn(this, map));
             }
             ResourceType upkeep = building.getType().getUpkeepResource();
             if (upkeep != null) {
@@ -128,7 +128,12 @@ public class Empire {
             }
         }
 
-        rate.put(ResourceType.FOOD, rate.get(ResourceType.FOOD) - units.size());
+        rate.put(ResourceType.FOOD,
+                rate.get(ResourceType.FOOD) + Adjacency.farmPairs(this, map) - units.size());
         return rate;
+    }
+
+    public int happiness() {
+        return Adjacency.monumentHappiness(this);
     }
 }

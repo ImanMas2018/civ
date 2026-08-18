@@ -101,24 +101,42 @@ public class MapGenerator {
     }
 
     private void paintMountainRanges(GameMap map, int centreCol, int centreRow) {
-        for (int ridge = 0; ridge < 2; ridge++) {
+        int placed = 0;
+        for (int attempt = 0; attempt < 40 && placed < 2; attempt++) {
             int col = random.nextInt(map.getCols());
             int row = random.nextInt(map.getRows());
             if (HexGeometry.distance(centreCol, centreRow, col, row) < 6) {
                 continue;
             }
+            Hex start = map.get(col, row);
+            if (start == null || start.getTerrain().isSea()) {
+                continue;
+            }
             int dir = random.nextInt(6);
-            for (int step = 0; step < 6; step++) {
+            int steps = 0;
+            for (int step = 0; step < 7; step++) {
                 Hex hex = map.get(col, row);
                 if (hex == null || hex.getTerrain().isSea()) {
                     break;
                 }
                 if (HexGeometry.distance(centreCol, centreRow, col, row) > 3) {
                     map.set(new Hex(col, row, Terrain.MOUNTAIN_RANGE, null, 0));
+                    steps++;
                 }
                 int[] next = HexGeometry.neighbour(col, row, dir);
                 col = next[0];
                 row = next[1];
+            }
+            if (steps > 0) {
+                placed++;
+            }
+        }
+        if (placed == 0) {
+            int col = Math.min(map.getCols() - 2, centreCol + 7);
+            int row = centreRow;
+            if (map.inside(col, row)
+                    && HexGeometry.distance(centreCol, centreRow, col, row) > 3) {
+                map.set(new Hex(col, row, Terrain.MOUNTAIN_RANGE, null, 0));
             }
         }
     }

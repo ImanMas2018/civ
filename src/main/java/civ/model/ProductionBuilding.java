@@ -37,23 +37,29 @@ public class ProductionBuilding extends Building {
     }
 
     @Override
-    public int outputPerTurn(Empire empire) {
+    public int outputPerTurn(Empire empire, GameMap map) {
         ResourceType output = getType().getProduces();
         if (output == null) {
             return 0;
         }
+
+        int workersOutput = workers.size() * getType().getRatePerWorker();
+        boolean isMine = getType() == BuildingType.STONE_MINE
+                || getType() == BuildingType.IRON_MINE;
+        if (isMine && (empire.hasTech(Tech.STEEL_TOOLS) || empire.hasTech(Tech.PRO_TOOLS))) {
+            workersOutput = workersOutput * 3 / 2;
+        }
+
+        if (getType() == BuildingType.DOCK) {
+            int fish = Adjacency.availableFish(getHex(), map);
+            return Math.min(workersOutput, fish);
+        }
+
         if (!getHex().hasResource()) {
             return 0;
         }
 
-        int total = workers.size() * getType().getRatePerWorker();
-
-        boolean isMine = getType() == BuildingType.STONE_MINE
-                || getType() == BuildingType.IRON_MINE;
-        if (isMine && (empire.hasTech(Tech.STEEL_TOOLS) || empire.hasTech(Tech.PRO_TOOLS))) {
-            total = total * 3 / 2;
-        }
-
-        return Math.min(total, getHex().getDepositAmount());
+        int extracted = Math.min(workersOutput, getHex().getDepositAmount());
+        return extracted + Adjacency.extraOutput(this, map);
     }
 }

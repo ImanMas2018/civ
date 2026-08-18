@@ -36,6 +36,10 @@ public class GameScreen extends JPanel {
             mapPanel.invalidateMap();
             controller.refresh();
         });
+        game.getBus().subscribe(GameEvent.BUILDING_DESTROYED, payload -> {
+            mapPanel.invalidateMap();
+            controller.refresh();
+        });
 
         add(hudPanel, BorderLayout.NORTH);
         add(mapPanel, BorderLayout.CENTER);

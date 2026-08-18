@@ -27,6 +27,8 @@ public class GameController {
     private final HudPanel hudPanel;
     private final ActionPanel actionPanel;
     private final TurnEngine turnEngine = new TurnEngine();
+    private boolean placingWall;
+    private boolean demolishingWall;
 
     public GameController(Game game, MapPanel mapPanel, HudPanel hudPanel, ActionPanel actionPanel) {
         this.game = game;
@@ -49,6 +51,21 @@ public class GameController {
         game.inspect(hex);
 
         Unit selected = game.getSelected();
+
+        if (placingWall && selected instanceof Builder) {
+            game.buildWall((Builder) selected, hex);
+            placingWall = false;
+            mapPanel.invalidateMap();
+            refresh();
+            return;
+        }
+        if (demolishingWall && selected instanceof Builder) {
+            game.demolishWall((Builder) selected, hex);
+            demolishingWall = false;
+            mapPanel.invalidateMap();
+            refresh();
+            return;
+        }
 
         if (selected instanceof BorderExpander
                 && game.canExpandBorder((BorderExpander) selected, hex)) {
@@ -93,6 +110,46 @@ public class GameController {
 
     public void unstation(Worker worker) {
         game.unstation(worker);
+        mapPanel.invalidateMap();
+        refresh();
+    }
+
+    public void buildRoad(Builder builder) {
+        game.buildRoad(builder);
+        mapPanel.invalidateMap();
+        refresh();
+    }
+
+    public void startPlaceWall() {
+        placingWall = true;
+        demolishingWall = false;
+        refresh();
+    }
+
+    public void startDemolishWall() {
+        demolishingWall = true;
+        placingWall = false;
+        refresh();
+    }
+
+    public boolean isPlacingWall() {
+        return placingWall;
+    }
+
+    public boolean isDemolishingWall() {
+        return demolishingWall;
+    }
+
+    public void demolish(Builder builder, Hex hex) {
+        int answer = JOptionPane.showConfirmDialog(
+                mapPanel,
+                "Demolish this? Spent resources are not returned.",
+                "Demolish",
+                JOptionPane.YES_NO_OPTION);
+        if (answer != JOptionPane.YES_OPTION) {
+            return;
+        }
+        game.demolish(builder, hex);
         mapPanel.invalidateMap();
         refresh();
     }
