@@ -4,7 +4,6 @@ import civ.model.Game;
 import civ.model.Hex;
 import civ.model.ResourceType;
 import civ.model.UnitBlueprint;
-import java.util.List;
 
 public class TrainUnitCommand implements Command {
 
@@ -32,9 +31,7 @@ public class TrainUnitCommand implements Command {
 
     @Override
     public void execute(Game game) {
-        Hex home = game.getEmpire().getTownHall().getHex();
-        List<Hex> ring = game.getMap().neighbours(home);
-        Hex spawn = ring.isEmpty() ? home : ring.get(0);
+        Hex spawn = game.spawnHexFor(blueprint);
         game.getUnitFactory().spawn(blueprint, spawn.getCol(), spawn.getRow());
         game.addLog(blueprint.getLabel() + " is ready.");
     }

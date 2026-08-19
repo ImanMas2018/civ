@@ -3,9 +3,13 @@ package civ.model;
 /** Shared building state. Subclasses decide how much they produce. */
 public abstract class Building {
 
+    private static final int DEFAULT_HP = 40;
+
     private final BuildingType type;
     private final Hex hex;
     private int unpaidTurns = 0;
+    private int hp = DEFAULT_HP;
+    private int maxHp = DEFAULT_HP;
 
     protected Building(BuildingType type, Hex hex) {
         this.type = type;
@@ -34,6 +38,35 @@ public abstract class Building {
 
     public boolean isCollapsed() {
         return unpaidTurns >= 3;
+    }
+
+    public int getHp() {
+        return hp;
+    }
+
+    public int getMaxHp() {
+        return maxHp;
+    }
+
+    public void damage(int amount) {
+        hp = Math.max(0, hp - amount);
+    }
+
+    public boolean isDestroyed() {
+        return hp <= 0;
+    }
+
+    protected void setHealth(int current, int max) {
+        this.hp = current;
+        this.maxHp = max;
+    }
+
+    protected void setMaxHp(int max) {
+        this.maxHp = max;
+    }
+
+    protected void heal(int amount) {
+        hp = Math.min(maxHp, hp + amount);
     }
 
     /** How much of {@code getType().getProduces()} this building makes this turn. */

@@ -17,13 +17,12 @@ public class TownHall extends Building {
     private Command activeCommand;
     private int turnsLeft;
     private int level = 1;
-    private int hp = START_HP;
-    private int maxHp = START_HP;
     private int defence = START_DEFENCE;
     private boolean defensiveWall = false;
 
     public TownHall(Hex hex) {
         super(BuildingType.TOWN_HALL, hex);
+        setHealth(START_HP, START_HP);
     }
 
     public int getLevel() {
@@ -32,14 +31,6 @@ public class TownHall extends Building {
 
     public TownHallLevel getRank() {
         return TownHallLevel.of(level);
-    }
-
-    public int getHp() {
-        return hp;
-    }
-
-    public int getMaxHp() {
-        return maxHp;
     }
 
     public int getDefence() {
@@ -116,7 +107,7 @@ public class TownHall extends Building {
         game.getEmpire().getStock().setCapacity(
                 game.getEmpire().getStock().getCapacity() + (next.getStorage() - oldStorage));
         if (next.getHeal() > 0) {
-            hp = Math.min(maxHp, hp + next.getHeal());
+            heal(next.getHeal());
         }
         game.addLog("Town Hall is now a " + next.getLabel() + ".");
     }
@@ -124,7 +115,7 @@ public class TownHall extends Building {
     public void applyDefensiveArchitecture() {
         defensiveWall = true;
         defence = WALL_DEFENCE;
-        maxHp = WALL_MAX_HP;
+        setMaxHp(WALL_MAX_HP);
     }
 
     @Override

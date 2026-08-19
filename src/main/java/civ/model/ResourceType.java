@@ -16,4 +16,9 @@ public enum ResourceType {
     public String getLabel() {
         return label;
     }
+
+    @Override
+    public String toString() {
+        return label;
+    }
 }

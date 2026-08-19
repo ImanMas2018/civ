@@ -28,6 +28,9 @@ public class UnitFactory {
         if (blueprint.getRequiredLevel() > game.getEmpire().getTownHall().getLevel()) {
             return false;
         }
+        if (blueprint == UnitBlueprint.CAVALRY && !game.hasMilitaryStable()) {
+            return false;
+        }
         return game.getEmpire().getStock().canPay(ResourceType.FOOD, blueprint.getFoodCost())
                 && game.getEmpire().getStock().canPay(ResourceType.WOOD, blueprint.getWoodCost());
     }

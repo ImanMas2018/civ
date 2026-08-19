@@ -1,0 +1,56 @@
+package civ.model.combat;
+
+import civ.model.MilitaryUnit;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Dice fight between two hexes. Structure damage is a separate method —
+ * walls and buildings never roll.
+ */
+public class Battle {
+
+    private final Dice dice;
+
+    public Battle(Dice dice) {
+        this.dice = dice;
+    }
+
+    public BattleReport resolve(int attackerDiceCount, int defenderDiceCount, int defenderBonus) {
+        return compare(
+                dice.roll(attackerDiceCount, 0),
+                dice.roll(defenderDiceCount, defenderBonus));
+    }
+
+    /**
+     * Pairs sorted rolls high→low. Ties go to the defender. Unpaired dice are ignored.
+     */
+    public static BattleReport compare(List<Integer> attackRolls, List<Integer> defenceRolls) {
+        int hitsOnDefender = 0;
+        int hitsOnAttacker = 0;
+        List<BattleReport.Pair> pairs = new ArrayList<>();
+
+        int pairCount = Math.min(attackRolls.size(), defenceRolls.size());
+        for (int i = 0; i < pairCount; i++) {
+            int attack = attackRolls.get(i);
+            int defence = defenceRolls.get(i);
+            boolean attackerWins = attack > defence;
+            pairs.add(new BattleReport.Pair(attack, defence, attackerWins));
+            if (attackerWins) {
+                hitsOnDefender++;
+            } else {
+                hitsOnAttacker++;
+            }
+        }
+
+        return new BattleReport(attackRolls, defenceRolls, pairs, hitsOnAttacker, hitsOnDefender);
+    }
+
+    public int damageToStructure(List<MilitaryUnit> attackers) {
+        int total = 0;
+        for (MilitaryUnit unit : attackers) {
+            total += unit.getAttackPower();
+        }
+        return total;
+    }
+}

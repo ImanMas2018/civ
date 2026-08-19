@@ -21,8 +21,7 @@ public class TurnEngine {
 
         game.nextTurn();
         refreshUnits(game, empire);
-
-        // Future systems (tribes, seasons, disasters, autosave) subscribe here.
+        // Future systems (seasons, disasters, autosave) subscribe here.
         // Do not call them from this class — that would invert the dependency.
         game.getBus().publish(GameEvent.TURN_ENDED, game);
     }
@@ -121,6 +120,9 @@ public class TurnEngine {
         int penalty = game.isStarving() ? 1 : 0;
         for (Unit unit : empire.getUnits()) {
             unit.refresh(penalty);
+        }
+        for (MilitaryUnit hostile : game.getHostiles()) {
+            hostile.refresh(0);
         }
     }
 }

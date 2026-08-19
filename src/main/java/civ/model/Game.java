@@ -3,6 +3,14 @@ package civ.model;
 import civ.model.command.ResearchTechCommand;
 import civ.model.command.TrainUnitCommand;
 import civ.model.command.UpgradeTownHallCommand;
+import civ.model.combat.ArcherHandler;
+import civ.model.combat.Battle;
+import civ.model.combat.BattleReport;
+import civ.model.combat.CavalryHandler;
+import civ.model.combat.DamageHandler;
+import civ.model.combat.Dice;
+import civ.model.combat.HostileHandler;
+import civ.model.combat.SwordsmanHandler;
 import civ.model.event.EventBus;
 import civ.model.event.GameEvent;
 import civ.model.factory.BuildingFactory;
@@ -10,6 +18,7 @@ import civ.model.factory.UnitFactory;
 import civ.util.HexGeometry;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 /**
  * Game state plus the rules the view and controller are allowed to ask.
@@ -22,8 +31,11 @@ public class Game {
     private final EventBus bus = new EventBus();
     private final UnitFactory unitFactory = new UnitFactory(this);
     private final BuildingFactory buildingFactory = new BuildingFactory(bus);
+    private final Battle battle;
+    private final List<MilitaryUnit> hostiles = new ArrayList<>();
     private final int centreCol;
     private final int centreRow;
+    private final Random random;
 
     private int turn = 1;
     private Unit selected;
@@ -31,10 +43,16 @@ public class Game {
     private boolean starving = false;
     private final List<String> log = new ArrayList<>();
 
+    private List<MilitaryUnit> pendingAttackers;
+    private List<MilitaryUnit> pendingDefenders;
+    private BattleReport pendingReport;
+
     public Game(long seed) {
         this.map = new GameMap(22, 18);
         this.centreCol = map.getCols() / 2;
         this.centreRow = map.getRows() / 2;
+        this.random = new Random(seed);
+        this.battle = new Battle(new Dice(random));
 
         new MapGenerator(seed).fill(map, centreCol, centreRow);
         setUpStartingPosition();
@@ -60,6 +78,11 @@ public class Game {
         addUnit(new Builder(ring.get(1).getCol(), ring.get(1).getRow()));
         addUnit(new Worker(ring.get(2).getCol(), ring.get(2).getRow()));
         addUnit(new Worker(ring.get(3).getCol(), ring.get(3).getRow()));
+        if (ring.size() > 4) {
+            addUnit(new Swordsman(ring.get(4).getCol(), ring.get(4).getRow()));
+            addUnit(new Archer(ring.get(4).getCol(), ring.get(4).getRow()));
+        }
+        spawnHostiles();
 
         empire.getStock().add(ResourceType.FOOD, 999);
         empire.getStock().add(ResourceType.WOOD, 999);
@@ -78,6 +101,19 @@ public class Game {
             selected = null;
         }
     }
+
+    public void addHostile(MilitaryUnit unit) {
+        hostiles.add(unit);
+    }
+
+    public List<MilitaryUnit> getHostiles() {
+        return hostiles;
+    }
+
+
+
+
+
 
     public GameMap getMap() {
         return map;
@@ -179,6 +215,24 @@ public class Game {
         } else if (hex.isExhausted()) {
             text.append(". deposit empty");
         }
+        Building building = hex.getBuilding();
+        if (building != null) {
+            text.append(". ").append(building.getType().getLabel())
+                    .append(" HP ").append(building.getHp())
+                    .append("/").append(building.getMaxHp());
+        }
+        List<MilitaryUnit> enemies = hostilesAt(hex);
+        if (!enemies.isEmpty()) {
+            text.append(". Hostile: ");
+            for (int i = 0; i < enemies.size(); i++) {
+                if (i > 0) {
+                    text.append(", ");
+                }
+                MilitaryUnit enemy = enemies.get(i);
+                text.append(enemy.getTypeName())
+                        .append(" (HP ").append(enemy.getCombatHp()).append(")");
+            }
+        }
         boolean buildable = hex.getTerrain().isLand() && hex.isOwned() && hex.getBuilding() == null;
         text.append(buildable ? ". Can build here." : ". Cannot build here.");
         return text.toString();
@@ -276,6 +330,12 @@ public class Game {
         if (target.getTerrain().isSea()) {
             return empire.hasTech(Tech.SEAFARING) && unit.getAp() > 0;
         }
+        if (!hostilesAt(target).isEmpty()) {
+            return false;
+        }
+        if (!canStack(unit, target)) {
+            return false;
+        }
         return unit.canSpend(moveCost(unit, target));
     }
 
@@ -301,6 +361,7 @@ public class Game {
         if (type == BuildingType.DOCK && !isCoastal(hex)) {
             return false;
         }
+        int woodCost = type.getWoodCost();
         if (!builder.canSpend(type.getApCost())) {
             return false;
         }
@@ -322,7 +383,7 @@ public class Game {
                 return false;
             }
         }
-        return empire.getStock().canPay(type.getWoodCost(), type.getStoneCost(), type.getIronCost());
+        return empire.getStock().canPay(woodCost, type.getStoneCost(), type.getIronCost());
     }
 
     public boolean canStation(Worker worker) {
@@ -411,7 +472,6 @@ public class Game {
         if (type == BuildingType.SETTLEMENT) {
             empire.raiseUnitCap(5);
         }
-
         builder.useCharge();
         if (!builder.hasCharge()) {
             removeUnit(builder);
@@ -502,12 +562,7 @@ public class Game {
         builder.spend(1);
         Building building = hex.getBuilding();
         if (building != null && !(building instanceof TownHall)) {
-            if (building instanceof ProductionBuilding) {
-                ((ProductionBuilding) building).releaseAllWorkers();
-            }
-            hex.setBuilding(null);
-            empire.getBuildings().remove(building);
-            bus.publish(GameEvent.BUILDING_DESTROYED, building);
+            removeBuildingFromMap(building);
             addLog("The " + building.getType().getLabel() + " was demolished. Resources are lost.");
         }
         if (hex.hasRoad()) {
@@ -594,6 +649,393 @@ public class Game {
 
     public void cancelTownHallOrder() {
         empire.getTownHall().cancelCommand(this);
+    }
+
+    public boolean hasMilitaryStable() {
+        for (Building building : empire.getBuildings()) {
+            if (building.getType() == BuildingType.MILITARY_STABLE) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public Hex spawnHexFor(UnitBlueprint blueprint) {
+        Hex home = empire.getTownHall().getHex();
+        Unit probe = blueprint.create(home.getCol(), home.getRow());
+        for (Hex hex : map.withinRange(home, 2)) {
+            if (!hex.isOwned() || !hex.getTerrain().isLand()) {
+                continue;
+            }
+            if (!hostilesAt(hex).isEmpty()) {
+                continue;
+            }
+            if (canStack(probe, hex)) {
+                return hex;
+            }
+        }
+        return home;
+    }
+
+    public boolean canStack(Unit unit, Hex target) {
+        if (!(unit instanceof MilitaryUnit) || ((MilitaryUnit) unit).isHostile()) {
+            return true;
+        }
+        int swords = 0;
+        int archers = 0;
+        int cavalry = 0;
+        for (Unit other : unitsAt(target)) {
+            if (other == unit) {
+                continue;
+            }
+            if (other instanceof Swordsman) {
+                swords++;
+            } else if (other instanceof Archer) {
+                archers++;
+            } else if (other instanceof Cavalry) {
+                cavalry++;
+            }
+        }
+        if (unit instanceof Swordsman && swords >= 2) {
+            return false;
+        }
+        if (unit instanceof Archer && archers >= 2) {
+            return false;
+        }
+        if (unit instanceof Cavalry && cavalry >= 1) {
+            return false;
+        }
+        return true;
+    }
+
+    public List<MilitaryUnit> hostilesAt(Hex hex) {
+        List<MilitaryUnit> result = new ArrayList<>();
+        for (MilitaryUnit unit : hostiles) {
+            if (unit.isOn(hex)) {
+                result.add(unit);
+            }
+        }
+        return result;
+    }
+
+    public List<MilitaryUnit> playerMilitaryNear(Hex centre, int radius) {
+        List<MilitaryUnit> result = new ArrayList<>();
+        for (Unit unit : empire.getUnits()) {
+            if (!(unit instanceof MilitaryUnit)) {
+                continue;
+            }
+            MilitaryUnit military = (MilitaryUnit) unit;
+            if (military.isHostile()) {
+                continue;
+            }
+            int d = HexGeometry.distance(
+                    centre.getCol(), centre.getRow(), unit.getCol(), unit.getRow());
+            if (d <= radius) {
+                result.add(military);
+            }
+        }
+        return result;
+    }
+
+
+
+    public List<MilitaryUnit> attackersOn(Hex from, Hex to) {
+        List<MilitaryUnit> result = new ArrayList<>();
+        if (from == null || to == null) {
+            return result;
+        }
+        int distance = HexGeometry.distance(
+                from.getCol(), from.getRow(), to.getCol(), to.getRow());
+        for (Unit unit : unitsAt(from)) {
+            if (!(unit instanceof MilitaryUnit)) {
+                continue;
+            }
+            MilitaryUnit military = (MilitaryUnit) unit;
+            if (military.isHostile() || military.getAp() < 1) {
+                continue;
+            }
+            if (distance == 2 && !(military instanceof Archer)) {
+                continue;
+            }
+            result.add(military);
+        }
+        return result;
+    }
+
+    public boolean canAttack(Hex from, Hex to) {
+        if (from == null || to == null || from == to) {
+            return false;
+        }
+        if (!to.isDiscovered()) {
+            return false;
+        }
+        int distance = HexGeometry.distance(
+                from.getCol(), from.getRow(), to.getCol(), to.getRow());
+        if (attackersOn(from, to).isEmpty()) {
+            return false;
+        }
+        if (distance == 1) {
+            return !hostilesAt(to).isEmpty() || canStrikeStructure(to) || canCapture(to)
+                   ;
+        }
+        if (distance == 2) {
+            return !hostilesAt(to).isEmpty() || canStrikeStructure(to);
+        }
+        return false;
+    }
+
+    public boolean canAttackWall(Hex from, Hex to) {
+        if (from == null || to == null) {
+            return false;
+        }
+        if (HexGeometry.distance(from.getCol(), from.getRow(), to.getCol(), to.getRow()) != 1) {
+            return false;
+        }
+        if (attackersOn(from, to).isEmpty()) {
+            return false;
+        }
+        Edge edge = map.getEdges().find(from, to);
+        return edge != null && edge.hasWall();
+    }
+
+    public boolean isDiceAttack(Hex from, Hex to) {
+        return canAttack(from, to) && !hostilesAt(to).isEmpty();
+    }
+
+    public BattleReport beginDiceAttack(Hex from, Hex to) {
+        if (!isDiceAttack(from, to)) {
+            return null;
+        }
+        List<MilitaryUnit> attackers = attackersOn(from, to);
+        List<MilitaryUnit> defenders = hostilesAt(to);
+        for (MilitaryUnit unit : attackers) {
+            unit.spend(1);
+        }
+        int distance = HexGeometry.distance(
+                from.getCol(), from.getRow(), to.getCol(), to.getRow());
+        pendingAttackers = attackers;
+        pendingDefenders = defenders;
+        pendingReport = battle.resolve(
+                attackerDiceCount(attackers, distance),
+                defenderDice(defenders),
+                wallBonus(from, to));
+        return pendingReport;
+    }
+
+    public void applyPendingDiceAttack() {
+        if (pendingReport == null) {
+            return;
+        }
+        DamageHandler chain = hitChain();
+        chain.handle(pendingDefenders, pendingReport.getHitsOnDefender());
+        chain.handle(pendingAttackers, pendingReport.getHitsOnAttacker());
+        for (MilitaryUnit unit : new ArrayList<>(pendingDefenders)) {
+            buryIfDead(unit);
+        }
+        for (MilitaryUnit unit : new ArrayList<>(pendingAttackers)) {
+            buryIfDead(unit);
+        }
+        addLog("Battle: " + pendingReport.getHitsOnDefender() + " hit(s) on the defender, "
+                + pendingReport.getHitsOnAttacker() + " hit(s) on the attacker.");
+        pendingAttackers = null;
+        pendingDefenders = null;
+        pendingReport = null;
+    }
+
+    public void performQuietAttack(Hex from, Hex to) {
+        if (!canAttack(from, to) || isDiceAttack(from, to)) {
+            return;
+        }
+        List<MilitaryUnit> attackers = attackersOn(from, to);
+        for (MilitaryUnit unit : attackers) {
+            unit.spend(1);
+        }
+        if (canCapture(to)) {
+            to.setOwned(true);
+            to.setDiscovered(true);
+            addLog("The hex was captured without a fight.");
+            return;
+        }
+        Building building = to.getBuilding();
+        if (building != null && !empire.getBuildings().contains(building)) {
+            strikeBuilding(building, battle.damageToStructure(attackers));
+        }
+    }
+
+    public void attackWall(Hex from, Hex to) {
+        if (!canAttackWall(from, to)) {
+            return;
+        }
+        List<MilitaryUnit> attackers = attackersOn(from, to);
+        for (MilitaryUnit unit : attackers) {
+            unit.spend(1);
+        }
+        Edge edge = map.getEdges().find(from, to);
+        Wall wall = edge.getWall();
+        int damage = battle.damageToStructure(attackers);
+        wall.damage(damage);
+        addLog("The wall took " + damage + " damage ("
+                + wall.getHp() + "/" + wall.getMaxHp() + ").");
+        if (wall.isDestroyed()) {
+            edge.setWall(null);
+            addLog("The wall was destroyed.");
+        }
+    }
+
+    private void spawnHostiles() {
+        Hex barbHex = null;
+        Hex animalHex = null;
+        for (int col = 0; col < map.getCols(); col++) {
+            for (int row = 0; row < map.getRows(); row++) {
+                Hex hex = map.get(col, row);
+                if (hex == null || !hex.getTerrain().isLand() || hex.isOwned()) {
+                    continue;
+                }
+                int distance = HexGeometry.distance(centreCol, centreRow, col, row);
+                if (distance != 2) {
+                    continue;
+                }
+                if (barbHex == null) {
+                    barbHex = hex;
+                } else if (animalHex == null) {
+                    animalHex = hex;
+                }
+            }
+        }
+        if (barbHex != null) {
+            barbHex.setDiscovered(true);
+            addHostile(new Barbarian(barbHex.getCol(), barbHex.getRow()));
+            addHostile(new Barbarian(barbHex.getCol(), barbHex.getRow()));
+            addLog("Raiders were spotted nearby.");
+        }
+        if (animalHex != null) {
+            animalHex.setDiscovered(true);
+            addHostile(new WildAnimal(animalHex.getCol(), animalHex.getRow()));
+        }
+    }
+
+    private boolean canCapture(Hex to) {
+        if (to.isOwned() || to.getBuilding() != null) {
+            return false;
+        }
+        if (!to.getTerrain().isLand()) {
+            return false;
+        }
+        return hostilesAt(to).isEmpty();
+    }
+
+    private boolean canStrikeStructure(Hex to) {
+        Building building = to.getBuilding();
+        if (building == null || empire.getBuildings().contains(building)) {
+            return false;
+        }
+        return hostilesAt(to).isEmpty();
+    }
+
+
+    private int attackerDiceCount(List<MilitaryUnit> attackers, int distance) {
+        if (distance == 2) {
+            return attackers.isEmpty() ? 0 : 1;
+        }
+        boolean sword = false;
+        boolean archer = false;
+        boolean cavalry = false;
+        for (MilitaryUnit unit : attackers) {
+            if (unit instanceof Swordsman) {
+                sword = true;
+            } else if (unit instanceof Archer) {
+                archer = true;
+            } else if (unit instanceof Cavalry) {
+                cavalry = true;
+            }
+        }
+        int count = 0;
+        if (sword) {
+            count++;
+        }
+        if (archer) {
+            count++;
+        }
+        if (cavalry) {
+            count++;
+        }
+        return count;
+    }
+
+    private int defenderDice(List<MilitaryUnit> defenders) {
+        boolean barbarian = false;
+        boolean animal = false;
+        for (MilitaryUnit unit : defenders) {
+            if (unit instanceof Barbarian) {
+                barbarian = true;
+            }
+            if (unit instanceof WildAnimal) {
+                animal = true;
+            }
+        }
+        if (barbarian) {
+            return 2;
+        }
+        if (animal) {
+            return 1;
+        }
+        return 2;
+    }
+
+    private int wallBonus(Hex from, Hex to) {
+        if (HexGeometry.distance(from.getCol(), from.getRow(), to.getCol(), to.getRow()) != 1) {
+            return 0;
+        }
+        Edge edge = map.getEdges().find(from, to);
+        return edge != null && edge.hasWall() ? 2 : 0;
+    }
+
+    private DamageHandler hitChain() {
+        DamageHandler chain = new HostileHandler();
+        chain.setNext(new SwordsmanHandler())
+                .setNext(new ArcherHandler())
+                .setNext(new CavalryHandler());
+        return chain;
+    }
+
+    public void buryUnit(MilitaryUnit unit) {
+        if (hostiles.contains(unit) || unit.isHostile()) {
+            hostiles.remove(unit);
+        } else {
+            removeUnit(unit);
+        }
+        bus.publish(GameEvent.UNIT_KILLED, unit);
+        addLog(unit.getTypeName() + " was killed.");
+    }
+
+    private void buryIfDead(MilitaryUnit unit) {
+        if (unit.isDead()) {
+            buryUnit(unit);
+        }
+    }
+
+    private void strikeBuilding(Building building, int damage) {
+        building.damage(damage);
+        addLog("The " + building.getType().getLabel() + " took " + damage + " damage ("
+                + building.getHp() + "/" + building.getMaxHp() + ").");
+        if (!building.isDestroyed()) {
+            return;
+        }
+        if (building instanceof TownHall) {
+            addLog("The Town Hall has fallen to 0 HP!");
+            return;
+        }
+        removeBuildingFromMap(building);
+        addLog("The " + building.getType().getLabel() + " was destroyed.");
+    }
+
+    private void removeBuildingFromMap(Building building) {
+        if (building instanceof ProductionBuilding) {
+            ((ProductionBuilding) building).releaseAllWorkers();
+        }
+        building.getHex().setBuilding(null);
+        empire.getBuildings().remove(building);
+        bus.publish(GameEvent.BUILDING_DESTROYED, building);
     }
 
     public void revealAround(Unit unit) {
