@@ -5,12 +5,15 @@ import civ.model.Builder;
 import civ.model.BuildingType;
 import civ.model.Game;
 import civ.model.Hex;
+import civ.model.MilitaryUnit;
 import civ.model.Tech;
 import civ.model.TurnEngine;
 import civ.model.Unit;
 import civ.model.UnitBlueprint;
 import civ.model.Worker;
+import civ.model.combat.BattleReport;
 import civ.view.ActionPanel;
+import civ.view.BattlePanel;
 import civ.view.HudPanel;
 import civ.view.MapPanel;
 import javax.swing.JOptionPane;
@@ -29,6 +32,8 @@ public class GameController {
     private final TurnEngine turnEngine = new TurnEngine();
     private boolean placingWall;
     private boolean demolishingWall;
+    private boolean attacking;
+    private boolean attackingWall;
 
     public GameController(Game game, MapPanel mapPanel, HudPanel hudPanel, ActionPanel actionPanel) {
         this.game = game;
@@ -51,6 +56,33 @@ public class GameController {
         game.inspect(hex);
 
         Unit selected = game.getSelected();
+
+        if (attacking && selected instanceof MilitaryUnit) {
+            attacking = false;
+            Hex from = game.hexOf(selected);
+            if (game.isDiceAttack(from, hex)) {
+                BattleReport report = game.beginDiceAttack(from, hex);
+                if (report != null) {
+                    BattlePanel.showAnimated(mapPanel, report, () -> {
+                        game.applyPendingDiceAttack();
+                        mapPanel.invalidateMap();
+                        refresh();
+                    });
+                }
+            } else if (game.canAttack(from, hex)) {
+                game.performQuietAttack(from, hex);
+                mapPanel.invalidateMap();
+            }
+            refresh();
+            return;
+        }
+        if (attackingWall && selected instanceof MilitaryUnit) {
+            attackingWall = false;
+            game.attackWall(game.hexOf(selected), hex);
+            mapPanel.invalidateMap();
+            refresh();
+            return;
+        }
 
         if (placingWall && selected instanceof Builder) {
             game.buildWall((Builder) selected, hex);
@@ -84,6 +116,7 @@ public class GameController {
             refresh();
             return;
         }
+
 
         List<Unit> here = game.unitsAt(hex);
         if (here.isEmpty()) {
@@ -123,12 +156,32 @@ public class GameController {
     public void startPlaceWall() {
         placingWall = true;
         demolishingWall = false;
+        attacking = false;
+        attackingWall = false;
         refresh();
     }
 
     public void startDemolishWall() {
         demolishingWall = true;
         placingWall = false;
+        attacking = false;
+        attackingWall = false;
+        refresh();
+    }
+
+    public void startAttack() {
+        attacking = true;
+        attackingWall = false;
+        placingWall = false;
+        demolishingWall = false;
+        refresh();
+    }
+
+    public void startAttackWall() {
+        attackingWall = true;
+        attacking = false;
+        placingWall = false;
+        demolishingWall = false;
         refresh();
     }
 
@@ -138,6 +191,27 @@ public class GameController {
 
     public boolean isDemolishingWall() {
         return demolishingWall;
+    }
+
+    public boolean isAttacking() {
+        return attacking;
+    }
+
+    public boolean isAttackingWall() {
+        return attackingWall;
+    }
+
+    /** Clears wall/attack pick modes. True if something was cancelled. */
+    public boolean cancelTransientMode() {
+        if (!placingWall && !demolishingWall && !attacking && !attackingWall) {
+            return false;
+        }
+        placingWall = false;
+        demolishingWall = false;
+        attacking = false;
+        attackingWall = false;
+        refresh();
+        return true;
     }
 
     public void demolish(Builder builder, Hex hex) {
@@ -190,4 +264,5 @@ public class GameController {
         mapPanel.invalidateMap();
         refresh();
     }
+
 }

@@ -8,6 +8,7 @@ import civ.model.BuildingType;
 import civ.model.Edge;
 import civ.model.Game;
 import civ.model.Hex;
+import civ.model.MilitaryUnit;
 import civ.model.ProductionBuilding;
 import civ.model.Terrain;
 import civ.model.TownHall;
@@ -31,6 +32,8 @@ import java.awt.event.MouseMotionAdapter;
 import java.awt.event.MouseWheelEvent;
 import java.awt.geom.Path2D;
 import java.awt.image.BufferedImage;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Draws the hex map with fog of war, units, zoom and pan.
@@ -69,10 +72,14 @@ public class MapPanel extends JPanel {
     private static final Color EXHAUSTED_TEXT = new Color(210, 90, 90);
     private static final Color MOVE_FILL = new Color(40, 190, 255, 110);
     private static final Color MOVE_EDGE = new Color(20, 230, 255);
+    private static final Color ATTACK_FILL = new Color(220, 70, 50, 120);
+    private static final Color ATTACK_EDGE = new Color(255, 120, 80);
     private static final Color EXPAND_FILL = new Color(255, 200, 60, 90);
     private static final Color EXPAND_EDGE = new Color(255, 220, 90);
     private static final BasicStroke HIGHLIGHT = new BasicStroke(3.0f);
     private static final Color UNIT_FILL = new Color(70, 120, 220);
+    private static final Color MILITARY_FILL = new Color(70, 140, 90);
+    private static final Color HOSTILE_FILL = new Color(180, 50, 45);
     private static final Color UNIT_SELECTED = Color.WHITE;
 
     private static final BasicStroke THIN = new BasicStroke(1.0f);
@@ -276,8 +283,9 @@ public class MapPanel extends JPanel {
         drawMoveHighlights(g2);
         drawExpandHighlights(g2);
         drawWallPickHighlights(g2);
+        drawAttackHighlights(g2);
         Unit selected = game.getSelected();
-        for (Unit unit : game.getUnits()) {
+        for (Unit unit : visibleUnits()) {
             if (unit != selected) {
                 drawUnit(g2, unit);
             }
@@ -510,6 +518,52 @@ public class MapPanel extends JPanel {
         }
     }
 
+    private void drawAttackHighlights(Graphics2D g2) {
+        if (controller == null || movingUnit != null || game.getSelected() == null) {
+            return;
+        }
+        Unit selected = game.getSelected();
+        if (!(selected instanceof MilitaryUnit)) {
+            return;
+        }
+        Hex from = game.hexOf(selected);
+        if (from == null) {
+            return;
+        }
+        if (controller.isAttackingWall()) {
+            for (Hex neighbour : game.getMap().neighbours(from)) {
+                if (game.canAttackWall(from, neighbour)) {
+                    paintHighlight(g2, neighbour, ATTACK_FILL, ATTACK_EDGE);
+                }
+            }
+            return;
+        }
+        if (!controller.isAttacking()) {
+            return;
+        }
+        int cols = game.getMap().getCols();
+        int rows = game.getMap().getRows();
+        for (int col = 0; col < cols; col++) {
+            for (int row = 0; row < rows; row++) {
+                Hex hex = game.getMap().get(col, row);
+                if (game.canAttack(from, hex)) {
+                    paintHighlight(g2, hex, ATTACK_FILL, ATTACK_EDGE);
+                }
+            }
+        }
+    }
+
+    private List<Unit> visibleUnits() {
+        List<Unit> units = new ArrayList<>(game.getUnits());
+        for (MilitaryUnit hostile : game.getHostiles()) {
+            Hex tile = game.hexOf(hostile);
+            if (tile != null && tile.isDiscovered()) {
+                units.add(hostile);
+            }
+        }
+        return units;
+    }
+
     private double screenX(int col, int row) {
         return (HexGeometry.centerX(col, row, HEX_SIZE) - cameraX) * zoom();
     }
@@ -521,6 +575,9 @@ public class MapPanel extends JPanel {
     private void drawMoveHighlights(Graphics2D g2) {
         Unit selected = game.getSelected();
         if (selected == null || movingUnit != null) {
+            return;
+        }
+        if (controller != null && (controller.isAttacking() || controller.isAttackingWall())) {
             return;
         }
         if (selected instanceof BorderExpander) {
@@ -583,7 +640,7 @@ public class MapPanel extends JPanel {
             cy = sy + (cy - sy) * progress;
         } else {
             int stackIndex = 0;
-            for (Unit other : game.getUnits()) {
+            for (Unit other : visibleUnits()) {
                 if (other.getCol() == unit.getCol() && other.getRow() == unit.getRow()) {
                     if (other == unit) {
                         break;
@@ -599,7 +656,13 @@ public class MapPanel extends JPanel {
         boolean selected = unit == game.getSelected();
         Hex tile = game.hexOf(unit);
         boolean boat = tile != null && tile.getTerrain().isSea();
-        g2.setColor(selected ? UNIT_SELECTED : (boat ? new Color(150, 110, 70) : UNIT_FILL));
+        Color fill = UNIT_FILL;
+        if (unit instanceof MilitaryUnit && ((MilitaryUnit) unit).isHostile()) {
+            fill = HOSTILE_FILL;
+        } else if (unit instanceof MilitaryUnit) {
+            fill = MILITARY_FILL;
+        }
+        g2.setColor(selected ? UNIT_SELECTED : (boat ? new Color(150, 110, 70) : fill));
         if (boat) {
             g2.fillRoundRect((int) (cx - radius), (int) (cy - radius / 2.0 + 6),
                     radius * 2, radius, radius / 2, radius / 2);

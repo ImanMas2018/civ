@@ -40,6 +40,11 @@ public class GameScreen extends JPanel {
             mapPanel.invalidateMap();
             controller.refresh();
         });
+        game.getBus().subscribe(GameEvent.UNIT_KILLED, payload -> {
+            mapPanel.invalidateMap();
+            controller.refresh();
+        });
+        game.getBus().subscribe(GameEvent.RELATION_CHANGED, payload -> controller.refresh());
 
         add(hudPanel, BorderLayout.NORTH);
         add(mapPanel, BorderLayout.CENTER);
@@ -48,6 +53,7 @@ public class GameScreen extends JPanel {
         actions.setPreferredSize(new Dimension(300, 0));
         actions.setBorder(null);
         actions.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        actions.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
         actions.getVerticalScrollBar().setUnitIncrement(16);
         add(actions, BorderLayout.EAST);
 
@@ -55,9 +61,12 @@ public class GameScreen extends JPanel {
     }
 
     /**
-     * Esc / Back: first drop the selected unit, then confirm return to the menu.
+     * Esc / Back: cancel attack/wall pick, then drop the selected unit, then confirm menu.
      */
     public void goBack() {
+        if (controller != null && controller.cancelTransientMode()) {
+            return;
+        }
         if (game.getSelected() != null) {
             game.select(null);
             controller.refresh();

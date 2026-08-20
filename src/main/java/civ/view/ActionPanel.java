@@ -6,6 +6,7 @@ import civ.model.Builder;
 import civ.model.BuildingType;
 import civ.model.Game;
 import civ.model.Hex;
+import civ.model.MilitaryUnit;
 import civ.model.Tech;
 import civ.model.TownHall;
 import civ.model.TownHallLevel;
@@ -16,22 +17,25 @@ import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
-import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JTextArea;
+import javax.swing.Scrollable;
 import javax.swing.SwingConstants;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Insets;
+import java.awt.Rectangle;
 
 /**
  * Side panel for the selected unit. Illegal actions are greyed out with a tooltip
  * that says why — the player never clicks something that then fails.
  */
-public class ActionPanel extends JPanel {
+public class ActionPanel extends JPanel implements Scrollable {
 
     private static final int PANEL_WIDTH = 280;
-    private static final int LABEL_WIDTH = 236;
+    /** Inner wrap width: pane 300 minus scrollbar and this panel's padding. */
+    private static final int TEXT_WIDTH = 240;
 
     private static final Color BG = new Color(32, 36, 46);
     private static final Color TITLE = new Color(230, 235, 245);
@@ -55,7 +59,32 @@ public class ActionPanel extends JPanel {
 
     @Override
     public Dimension getMinimumSize() {
-        return new Dimension(PANEL_WIDTH, super.getMinimumSize().height);
+        return new Dimension(0, super.getMinimumSize().height);
+    }
+
+    @Override
+    public Dimension getPreferredScrollableViewportSize() {
+        return new Dimension(PANEL_WIDTH, 400);
+    }
+
+    @Override
+    public int getScrollableUnitIncrement(Rectangle visible, int orientation, int direction) {
+        return 16;
+    }
+
+    @Override
+    public int getScrollableBlockIncrement(Rectangle visible, int orientation, int direction) {
+        return Math.max(16, visible.height - 16);
+    }
+
+    @Override
+    public boolean getScrollableTracksViewportWidth() {
+        return true;
+    }
+
+    @Override
+    public boolean getScrollableTracksViewportHeight() {
+        return false;
     }
 
     public void setController(GameController controller) {
@@ -72,7 +101,7 @@ public class ActionPanel extends JPanel {
             add(Box.createVerticalStrut(8));
         }
         if (selected == null) {
-            addTitle("Nothing selected");
+            addTitle("No unit selected");
             addBody("Click a unit on the map.");
             addBody("Click a hex to inspect its terrain.");
         } else {
@@ -131,6 +160,26 @@ public class ActionPanel extends JPanel {
                 addTitle("Border Expander");
                 addBody("Click a discovered hex to claim it and its 6 neighbours. The unit is then consumed.");
             }
+
+            if (selected instanceof MilitaryUnit
+                    && !((MilitaryUnit) selected).isHostile()) {
+                add(Box.createVerticalStrut(8));
+                addTitle("Combat");
+                addButton("Attack — click a hex",
+                        selected.getAp() >= 1,
+                        "Needs 1 AP. Adjacent hexes use every military type; range 2 needs an Archer.",
+                        () -> controller.startAttack());
+                addButton("Attack wall — click a neighbour",
+                        selected.getAp() >= 1,
+                        "No dice. Damage is the sum of attack powers. A wall bonus applies until it falls.",
+                        () -> controller.startAttackWall());
+                if (controller != null && controller.isAttacking()) {
+                    addBody("Click a target. Adjacent: one die per type. Range 2: one archer die. Esc cancels.");
+                }
+                if (controller != null && controller.isAttackingWall()) {
+                    addBody("Click the hex on the other side of the wall. Esc cancels.");
+                }
+            }
         }
 
         add(Box.createVerticalStrut(12));
@@ -166,7 +215,11 @@ public class ActionPanel extends JPanel {
             if (game.getEmpire().hasTech(tech)) {
                 continue;
             }
-            addButton("Research " + tech.getLabel(),
+            addButton("Research " + tech.getLabel()
+                            + "<br>(" + tech.getTurns() + "t, "
+                            + tech.getWoodCost() + "w "
+                            + tech.getStoneCost() + "s "
+                            + tech.getIronCost() + "i)",
                     game.canResearch(tech),
                     researchReason(tech),
                     () -> controller.research(tech));
@@ -213,6 +266,9 @@ public class ActionPanel extends JPanel {
         if (blueprint.getRequiredLevel() > game.getEmpire().getTownHall().getLevel()) {
             return "Needs Town Hall level " + blueprint.getRequiredLevel();
         }
+        if (blueprint == UnitBlueprint.CAVALRY && !game.hasMilitaryStable()) {
+            return "Needs a Military Stable on the map.";
+        }
         if (blueprint.isMilitary()
                 && game.getEmpire().countMilitary() >= game.getEmpire().getMilitaryCap()) {
             return "Military unit cap reached.";
@@ -234,32 +290,52 @@ public class ActionPanel extends JPanel {
     }
 
     private void addTitle(String text) {
-        JLabel label = new JLabel(text);
-        label.setForeground(TITLE);
-        label.setFont(new Font("SansSerif", Font.BOLD, 13));
-        label.setAlignmentX(LEFT_ALIGNMENT);
-        add(label);
+        add(wrappingText(text, TITLE, Font.BOLD, 13));
         add(Box.createVerticalStrut(6));
     }
 
     private void addBody(String text) {
-        JLabel label = new JLabel("<html><div style='width:" + LABEL_WIDTH + "px'>"
-                + text + "</div></html>");
-        label.setForeground(BODY);
-        label.setFont(new Font("SansSerif", Font.PLAIN, 12));
-        label.setAlignmentX(LEFT_ALIGNMENT);
-        add(label);
+        add(wrappingText(text, BODY, Font.PLAIN, 12));
         add(Box.createVerticalStrut(4));
     }
 
+    private JTextArea wrappingText(String text, Color color, int style, int size) {
+        JTextArea area = new JTextArea(text);
+        area.setLineWrap(true);
+        area.setWrapStyleWord(true);
+        area.setEditable(false);
+        area.setFocusable(false);
+        area.setOpaque(false);
+        area.setForeground(color);
+        area.setFont(new Font("SansSerif", style, size));
+        area.setAlignmentX(LEFT_ALIGNMENT);
+        area.setBorder(BorderFactory.createEmptyBorder());
+        area.setSize(TEXT_WIDTH, Short.MAX_VALUE);
+        int height = area.getPreferredSize().height;
+        area.setPreferredSize(new Dimension(TEXT_WIDTH, height));
+        area.setMaximumSize(new Dimension(Integer.MAX_VALUE, height));
+        area.setMinimumSize(new Dimension(0, height));
+        return area;
+    }
+
     private void addButton(String text, boolean enabled, String reason, Runnable action) {
-        JButton button = new JButton("<html><div style='text-align:center; width:"
-                + LABEL_WIDTH + "px'>" + text + "</div></html>");
+        // No fixed-width HTML block: that was wider than the content area and
+        // made Swing clip the left, so labels looked shifted to the right.
+        JButton button = new JButton("<html><center>" + text + "</center></html>");
         button.setEnabled(enabled);
         button.setAlignmentX(LEFT_ALIGNMENT);
         button.setHorizontalAlignment(SwingConstants.CENTER);
+        button.setVerticalAlignment(SwingConstants.CENTER);
+        button.setHorizontalTextPosition(SwingConstants.CENTER);
         button.setMargin(new Insets(6, 8, 6, 8));
-        button.setMaximumSize(new Dimension(Integer.MAX_VALUE, 64));
+        button.setIconTextGap(0);
+
+        button.setSize(TEXT_WIDTH, Short.MAX_VALUE);
+        int height = Math.max(32, button.getPreferredSize().height);
+        button.setPreferredSize(new Dimension(TEXT_WIDTH, height));
+        button.setMaximumSize(new Dimension(Integer.MAX_VALUE, height));
+        button.setMinimumSize(new Dimension(0, height));
+
         if (!enabled) {
             button.setToolTipText(reason);
         }

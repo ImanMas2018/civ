@@ -119,11 +119,14 @@ public class HudPanel extends JPanel {
         }
 
         unitsLabel.setText("Units " + empire.getUnits().size() + "/" + empire.getUnitCap()
+                + "  Army " + empire.countMilitary() + "/" + empire.getMilitaryCap()
                 + "  (E" + empire.countUnits("Explorer")
                 + " B" + empire.countUnits("Builder")
                 + " W" + empire.countUnits("Worker")
                 + " X" + empire.countUnits("Border Expander")
-                + " A" + empire.countUnits("Archer") + ")");
+                + " S" + empire.countUnits("Swordsman")
+                + " A" + empire.countUnits("Archer")
+                + " C" + empire.countUnits("Cavalry") + ")");
 
         TownHall townHall = empire.getTownHall();
         townHallLabel.setText(townHall.describeLevel()
