@@ -476,9 +476,17 @@ public class MapPanel extends JPanel {
         if (building == null) {
             return;
         }
+        if (building.getType() == BuildingType.TRIBE_CAMP) {
+            civ.model.tribe.Tribe tribe = game.tribeAt(hex);
+            if (tribe == null || !tribe.isDiscovered()) {
+                return;
+            }
+        }
         int size = Math.max(10, (int) (16 * zoom()));
         g2.setColor(building.getType() == BuildingType.TOWN_HALL
                 ? MARKER_FILL
+                : building.getType() == BuildingType.TRIBE_CAMP
+                ? new Color(180, 90, 70)
                 : new Color(200, 160, 100));
         g2.fillRect((int) (cx - size / 2.0), (int) (cy - size / 2.0), size, size);
         g2.setColor(Color.BLACK);
@@ -559,6 +567,17 @@ public class MapPanel extends JPanel {
             Hex tile = game.hexOf(hostile);
             if (tile != null && tile.isDiscovered()) {
                 units.add(hostile);
+            }
+        }
+        for (civ.model.tribe.Tribe tribe : game.getTribes()) {
+            if (!tribe.isDiscovered() || tribe.isDestroyed()) {
+                continue;
+            }
+            for (civ.model.tribe.TribeGuard guard : tribe.getGuards()) {
+                Hex tile = game.hexOf(guard);
+                if (tile != null && tile.isDiscovered()) {
+                    units.add(guard);
+                }
             }
         }
         return units;

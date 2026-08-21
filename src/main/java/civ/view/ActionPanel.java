@@ -121,7 +121,9 @@ public class ActionPanel extends JPanel implements Scrollable {
                         "Spend 1 AP after you pick the edge. Not on sea or mountain range.",
                         () -> controller.startPlaceWall());
                 for (BuildingType type : BuildingType.values()) {
-                    if (type == BuildingType.TOWN_HALL) {
+                    if (type == BuildingType.TOWN_HALL
+                            || type == BuildingType.TRIBE_CAMP
+                            || type == BuildingType.OUTPOST) {
                         continue;
                     }
                     boolean allowed = game.canBuild(builder, type, game.hexOf(builder));
@@ -179,6 +181,21 @@ public class ActionPanel extends JPanel implements Scrollable {
                 if (controller != null && controller.isAttackingWall()) {
                     addBody("Click the hex on the other side of the wall. Esc cancels.");
                 }
+            }
+        }
+
+        java.util.List<civ.model.tribe.Tribe> known = new java.util.ArrayList<>();
+        for (civ.model.tribe.Tribe tribe : game.getTribes()) {
+            if (tribe.isDiscovered() && !tribe.isDestroyed()) {
+                known.add(tribe);
+            }
+        }
+        if (!known.isEmpty()) {
+            add(Box.createVerticalStrut(8));
+            addTitle("Tribes");
+            for (civ.model.tribe.Tribe tribe : known) {
+                addButton(tribe.getName() + " (" + tribe.getState().getName() + ")",
+                        true, null, () -> controller.openTribePanel(tribe));
             }
         }
 

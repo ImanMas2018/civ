@@ -15,6 +15,14 @@ import civ.model.event.EventBus;
 import civ.model.event.GameEvent;
 import civ.model.factory.BuildingFactory;
 import civ.model.factory.UnitFactory;
+import civ.model.tribe.Quest;
+import civ.model.tribe.QuestStatus;
+import civ.model.tribe.Tribe;
+import civ.model.tribe.TribeCamp;
+import civ.model.tribe.TribeGuard;
+import civ.model.tribe.TribePlacer;
+import civ.model.tribe.TribeTurnBehaviour;
+import civ.model.tribe.TribeType;
 import civ.util.HexGeometry;
 import java.util.ArrayList;
 import java.util.List;
@@ -32,7 +40,9 @@ public class Game {
     private final UnitFactory unitFactory = new UnitFactory(this);
     private final BuildingFactory buildingFactory = new BuildingFactory(bus);
     private final Battle battle;
+    private final TribeTurnBehaviour tribeBehaviour = new TribeTurnBehaviour();
     private final List<MilitaryUnit> hostiles = new ArrayList<>();
+    private final List<Tribe> tribes = new ArrayList<>();
     private final int centreCol;
     private final int centreRow;
     private final Random random;
@@ -41,11 +51,13 @@ public class Game {
     private Unit selected;
     private Hex inspected;
     private boolean starving = false;
+    private boolean nextDockHalfPrice = false;
     private final List<String> log = new ArrayList<>();
 
     private List<MilitaryUnit> pendingAttackers;
     private List<MilitaryUnit> pendingDefenders;
     private BattleReport pendingReport;
+    private Tribe pendingAttackedTribe;
 
     public Game(long seed) {
         this.map = new GameMap(22, 18);
@@ -83,6 +95,7 @@ public class Game {
             addUnit(new Archer(ring.get(4).getCol(), ring.get(4).getRow()));
         }
         spawnHostiles();
+        tribes.addAll(new TribePlacer(random).place(map, centreCol, centreRow));
 
         empire.getStock().add(ResourceType.FOOD, 999);
         empire.getStock().add(ResourceType.WOOD, 999);
@@ -110,10 +123,19 @@ public class Game {
         return hostiles;
     }
 
+    public List<Tribe> getTribes() {
+        return tribes;
+    }
 
 
 
+    public boolean isNextDockHalfPrice() {
+        return nextDockHalfPrice;
+    }
 
+    public void setNextDockHalfPrice(boolean nextDockHalfPrice) {
+        this.nextDockHalfPrice = nextDockHalfPrice;
+    }
 
     public GameMap getMap() {
         return map;
@@ -232,6 +254,12 @@ public class Game {
                 text.append(enemy.getTypeName())
                         .append(" (HP ").append(enemy.getCombatHp()).append(")");
             }
+        }
+        Tribe tribe = tribeAt(hex);
+        if (tribe != null && tribe.isDiscovered() && !tribe.isDestroyed()) {
+            text.append(". Tribe ").append(tribe.getName())
+                    .append(" (").append(tribe.getState().getName())
+                    .append(", ").append(tribe.getRelation()).append(")");
         }
         boolean buildable = hex.getTerrain().isLand() && hex.isOwned() && hex.getBuilding() == null;
         text.append(buildable ? ". Can build here." : ". Cannot build here.");
@@ -361,7 +389,14 @@ public class Game {
         if (type == BuildingType.DOCK && !isCoastal(hex)) {
             return false;
         }
+        if (type == BuildingType.TRIBE_CAMP
+                || type == BuildingType.OUTPOST || type == BuildingType.TOWN_HALL) {
+            return false;
+        }
         int woodCost = type.getWoodCost();
+        if (type == BuildingType.DOCK && nextDockHalfPrice) {
+            woodCost = woodCost / 2;
+        }
         if (!builder.canSpend(type.getApCost())) {
             return false;
         }
@@ -463,7 +498,11 @@ public class Game {
             return;
         }
 
-        empire.getStock().pay(type.getWoodCost(), type.getStoneCost(), type.getIronCost());
+        int woodCost = type.getWoodCost();
+        if (type == BuildingType.DOCK && nextDockHalfPrice) {
+            woodCost = woodCost / 2;
+        }
+        empire.getStock().pay(woodCost, type.getStoneCost(), type.getIronCost());
         builder.spend(type.getApCost());
 
         Building building = buildingFactory.create(type, hex);
@@ -472,6 +511,11 @@ public class Game {
         if (type == BuildingType.SETTLEMENT) {
             empire.raiseUnitCap(5);
         }
+        if (type == BuildingType.DOCK && nextDockHalfPrice) {
+            nextDockHalfPrice = false;
+            addLog("Dock built at half wood cost (coastal quest reward).");
+        }
+
         builder.useCharge();
         if (!builder.hasCharge()) {
             removeUnit(builder);
@@ -549,6 +593,9 @@ public class Game {
         }
         Building building = hex.getBuilding();
         if (building instanceof TownHall) {
+            return false;
+        }
+        if (building != null && building.getType() == BuildingType.TRIBE_CAMP) {
             return false;
         }
         boolean hasBuilding = building != null && hex.isOwned();
@@ -715,6 +762,16 @@ public class Game {
                 result.add(unit);
             }
         }
+        for (Tribe tribe : tribes) {
+            if (tribe.isDestroyed()) {
+                continue;
+            }
+            for (TribeGuard guard : tribe.getGuards()) {
+                if (guard.isOn(hex)) {
+                    result.add(guard);
+                }
+            }
+        }
         return result;
     }
 
@@ -737,7 +794,28 @@ public class Game {
         return result;
     }
 
+    public Tribe tribeAt(Hex hex) {
+        if (hex == null) {
+            return null;
+        }
+        for (Tribe tribe : tribes) {
+            if (!tribe.isDestroyed() && tribe.getCampHex() == hex) {
+                return tribe;
+            }
+        }
+        Building building = hex.getBuilding();
+        if (building instanceof TribeCamp) {
+            return ((TribeCamp) building).getTribe();
+        }
+        return null;
+    }
 
+    public Tribe tribeOfGuard(MilitaryUnit unit) {
+        if (unit instanceof TribeGuard) {
+            return ((TribeGuard) unit).getTribe();
+        }
+        return null;
+    }
 
     public List<MilitaryUnit> attackersOn(Hex from, Hex to) {
         List<MilitaryUnit> result = new ArrayList<>();
@@ -776,10 +854,10 @@ public class Game {
         }
         if (distance == 1) {
             return !hostilesAt(to).isEmpty() || canStrikeStructure(to) || canCapture(to)
-                   ;
+                    || canStrikeTribeCamp(to);
         }
         if (distance == 2) {
-            return !hostilesAt(to).isEmpty() || canStrikeStructure(to);
+            return !hostilesAt(to).isEmpty() || canStrikeStructure(to) || canStrikeTribeCamp(to);
         }
         return false;
     }
@@ -811,10 +889,15 @@ public class Game {
         for (MilitaryUnit unit : attackers) {
             unit.spend(1);
         }
+        noteAggressionFromAttack(to, defenders);
         int distance = HexGeometry.distance(
                 from.getCol(), from.getRow(), to.getCol(), to.getRow());
         pendingAttackers = attackers;
         pendingDefenders = defenders;
+        pendingAttackedTribe = tribeAt(to);
+        if (pendingAttackedTribe == null && !defenders.isEmpty()) {
+            pendingAttackedTribe = tribeOfGuard(defenders.get(0));
+        }
         pendingReport = battle.resolve(
                 attackerDiceCount(attackers, distance),
                 defenderDice(defenders),
@@ -829,8 +912,16 @@ public class Game {
         DamageHandler chain = hitChain();
         chain.handle(pendingDefenders, pendingReport.getHitsOnDefender());
         chain.handle(pendingAttackers, pendingReport.getHitsOnAttacker());
+        Hex killHex = pendingDefenders.isEmpty()
+                ? null
+                : map.get(pendingDefenders.get(0).getCol(), pendingDefenders.get(0).getRow());
         for (MilitaryUnit unit : new ArrayList<>(pendingDefenders)) {
-            buryIfDead(unit);
+            if (unit.isDead()) {
+                if (pendingAttackedTribe != null && killHex != null) {
+                    noteQuestKill(pendingAttackedTribe, killHex);
+                }
+                buryUnit(unit);
+            }
         }
         for (MilitaryUnit unit : new ArrayList<>(pendingAttackers)) {
             buryIfDead(unit);
@@ -840,6 +931,7 @@ public class Game {
         pendingAttackers = null;
         pendingDefenders = null;
         pendingReport = null;
+        pendingAttackedTribe = null;
     }
 
     public void performQuietAttack(Hex from, Hex to) {
@@ -854,6 +946,12 @@ public class Game {
             to.setOwned(true);
             to.setDiscovered(true);
             addLog("The hex was captured without a fight.");
+            return;
+        }
+        if (canStrikeTribeCamp(to)) {
+            Tribe tribe = tribeAt(to);
+            noteAggressionOnTribe(tribe);
+            strikeBuilding(to.getBuilding(), battle.damageToStructure(attackers));
             return;
         }
         Building building = to.getBuilding();
@@ -929,9 +1027,19 @@ public class Game {
         if (building == null || empire.getBuildings().contains(building)) {
             return false;
         }
+        if (building instanceof TribeCamp) {
+            return false;
+        }
         return hostilesAt(to).isEmpty();
     }
 
+    private boolean canStrikeTribeCamp(Hex to) {
+        Tribe tribe = tribeAt(to);
+        if (tribe == null || tribe.isDestroyed()) {
+            return false;
+        }
+        return hostilesAt(to).isEmpty();
+    }
 
     private int attackerDiceCount(List<MilitaryUnit> attackers, int distance) {
         if (distance == 2) {
@@ -965,6 +1073,7 @@ public class Game {
     private int defenderDice(List<MilitaryUnit> defenders) {
         boolean barbarian = false;
         boolean animal = false;
+        boolean tribeGuard = false;
         for (MilitaryUnit unit : defenders) {
             if (unit instanceof Barbarian) {
                 barbarian = true;
@@ -972,8 +1081,11 @@ public class Game {
             if (unit instanceof WildAnimal) {
                 animal = true;
             }
+            if (unit instanceof TribeGuard) {
+                tribeGuard = true;
+            }
         }
-        if (barbarian) {
+        if (barbarian || tribeGuard) {
             return 2;
         }
         if (animal) {
@@ -999,7 +1111,10 @@ public class Game {
     }
 
     public void buryUnit(MilitaryUnit unit) {
-        if (hostiles.contains(unit) || unit.isHostile()) {
+        if (unit instanceof TribeGuard) {
+            TribeGuard guard = (TribeGuard) unit;
+            guard.getTribe().getGuards().remove(guard);
+        } else if (hostiles.contains(unit) || unit.isHostile()) {
             hostiles.remove(unit);
         } else {
             removeUnit(unit);
@@ -1025,6 +1140,10 @@ public class Game {
             addLog("The Town Hall has fallen to 0 HP!");
             return;
         }
+        if (building instanceof TribeCamp) {
+            conquerTribe(((TribeCamp) building).getTribe());
+            return;
+        }
         removeBuildingFromMap(building);
         addLog("The " + building.getType().getLabel() + " was destroyed.");
     }
@@ -1038,6 +1157,188 @@ public class Game {
         bus.publish(GameEvent.BUILDING_DESTROYED, building);
     }
 
+
+    private void noteAggressionFromAttack(Hex to, List<MilitaryUnit> defenders) {
+        Tribe tribe = tribeAt(to);
+        if (tribe == null && !defenders.isEmpty()) {
+            tribe = tribeOfGuard(defenders.get(0));
+        }
+        if (tribe != null) {
+            noteAggressionOnTribe(tribe);
+        }
+    }
+
+    private void noteAggressionOnTribe(Tribe tribe) {
+        if (tribe == null || tribe.isDestroyed()) {
+            return;
+        }
+        boolean wasAllied = tribe.isAllied();
+        boolean wasFriendly = tribe.getRelation() >= 20 && !wasAllied;
+        if (wasAllied) {
+            empire.addHappinessBonus(-15);
+            addLog("Attacking an ally: −15 happiness.");
+        } else if (wasFriendly) {
+            empire.addHappinessBonus(-5);
+            addLog("Attacking a friendly tribe: −5 happiness.");
+        }
+        if (tribe.getQuest() != null) {
+            QuestStatus status = tribe.getQuest().getStatus();
+            if (status == QuestStatus.ACTIVE || status == QuestStatus.READY
+                    || status == QuestStatus.AVAILABLE) {
+                tribe.getQuest().cancel();
+            }
+        }
+        tribe.setAllied(false);
+        tribe.setRelationAbsolute(-100, bus);
+        addLog("War with " + tribe.getName() + "!");
+    }
+
+    private void noteQuestKill(Tribe nearTribe, Hex killHex) {
+        for (Tribe tribe : tribes) {
+            if (tribe.isDestroyed() || tribe.getQuest() == null) {
+                continue;
+            }
+            tribe.getQuest().noteKillNearCamp(tribe, killHex);
+            tribe.getQuest().refreshReady(this, tribe);
+        }
+    }
+
+    private void conquerTribe(Tribe tribe) {
+        Hex camp = tribe.getCampHex();
+        grantLoot(tribe);
+        for (TribeGuard guard : new ArrayList<>(tribe.getGuards())) {
+            tribe.getGuards().remove(guard);
+        }
+        tribe.markDestroyed();
+        camp.setBuilding(null);
+        Outpost outpost = new Outpost(camp);
+        camp.setBuilding(outpost);
+        empire.getBuildings().add(outpost);
+        camp.setOwned(true);
+        camp.setDiscovered(true);
+        for (Hex neighbour : map.neighbours(camp)) {
+            if (neighbour.getTerrain().isPassable() && neighbour.getTerrain().isLand()) {
+                neighbour.setOwned(true);
+                neighbour.setDiscovered(true);
+            }
+        }
+        bus.publish(GameEvent.BUILDING_DESTROYED, tribe.getCamp());
+        addLog(tribe.getName() + " was defeated. The camp is now an Outpost.");
+    }
+
+    private void grantLoot(Tribe tribe) {
+        switch (tribe.getType()) {
+            case FARMER:
+                empire.getStock().add(ResourceType.FOOD, 40);
+                break;
+            case MOUNTAIN:
+                empire.getStock().add(ResourceType.STONE, 25);
+                empire.getStock().add(ResourceType.IRON, 15);
+                break;
+            case TRADER:
+                empire.getStock().add(ResourceType.WOOD, 20);
+                empire.getStock().add(ResourceType.STONE, 20);
+                empire.getStock().add(ResourceType.FOOD, 20);
+                break;
+            case WARRIOR:
+                empire.getStock().add(ResourceType.IRON, 30);
+                break;
+            case COASTAL:
+                empire.getStock().add(ResourceType.FOOD, 25);
+                empire.getStock().add(ResourceType.WOOD, 25);
+                break;
+            default:
+                break;
+        }
+        addLog("Loot claimed from " + tribe.getName() + ".");
+    }
+
+    public void runTribeTurns() {
+        for (Tribe tribe : tribes) {
+            tribeBehaviour.act(this, tribe);
+        }
+    }
+
+    public void gift(Tribe tribe, ResourceType type, int amount) {
+        if (tribe == null || !tribe.isDiscovered() || tribe.isDestroyed()) {
+            return;
+        }
+        if (!tribe.getState().allowsGift()) {
+            return;
+        }
+        if (!empire.getStock().canPay(type, amount)) {
+            return;
+        }
+        int gain = tribe.giftRelationGain(type, amount);
+        if (gain <= 0) {
+            return;
+        }
+        empire.getStock().add(type, -amount);
+        tribe.changeRelation(gain, bus);
+        addLog("Gifted " + amount + " " + type.getLabel() + " to " + tribe.getName()
+                + " (+" + gain + " relation).");
+    }
+
+    public void declareWar(Tribe tribe) {
+        if (tribe == null || !tribe.getState().allowsWarDeclaration()) {
+            return;
+        }
+        noteAggressionOnTribe(tribe);
+    }
+
+    public boolean canAskPeace(Tribe tribe) {
+        return tribe != null
+                && tribe.getState().allowsPeaceRequest()
+                && empire.getStock().canPay(ResourceType.FOOD, 30)
+                && empire.getStock().canPay(ResourceType.WOOD, 30)
+                && empire.getStock().canPay(ResourceType.IRON, 30);
+    }
+
+    public void askPeace(Tribe tribe) {
+        if (!canAskPeace(tribe)) {
+            return;
+        }
+        empire.getStock().add(ResourceType.FOOD, -30);
+        empire.getStock().add(ResourceType.WOOD, -30);
+        empire.getStock().add(ResourceType.IRON, -30);
+        tribe.setRelationAbsolute(-10, bus);
+        addLog("Peace with " + tribe.getName() + ". Relation is now −10.");
+    }
+
+    public void askAlliance(Tribe tribe) {
+        if (!civ.model.tribe.AllianceRules.canAlly(tribe, tribes)) {
+            return;
+        }
+        tribe.setAllied(true);
+        if (tribe.getRelation() < 70) {
+            tribe.setRelationAbsolute(70, bus);
+        }
+        addLog("Allied with " + tribe.getName() + ".");
+        bus.publish(GameEvent.RELATION_CHANGED, tribe);
+    }
+
+    public void takeQuest(Tribe tribe) {
+        if (tribe == null || !tribe.getState().allowsQuest() || tribe.isQuestBlocked()) {
+            return;
+        }
+        Quest quest = tribe.getQuest();
+        if (quest == null || quest.getStatus() != QuestStatus.AVAILABLE) {
+            return;
+        }
+        quest.accept();
+        addLog("Accepted quest from " + tribe.getName() + ": " + quest.getTitle());
+    }
+
+    public void deliverQuest(Tribe tribe) {
+        if (tribe == null || tribe.getQuest() == null) {
+            return;
+        }
+        tribe.getQuest().refreshReady(this, tribe);
+        tribe.getQuest().deliver(this, tribe);
+    }
+
+
+
     public void revealAround(Unit unit) {
         Hex centre = hexOf(unit);
         if (centre == null) {
@@ -1045,6 +1346,12 @@ public class Game {
         }
         for (Hex hex : map.withinRange(centre, unit.getVisionRadius())) {
             hex.setDiscovered(true);
+            Tribe tribe = tribeAt(hex);
+            if (tribe != null && !tribe.isDiscovered()) {
+                tribe.discover();
+                addLog("Discovered the " + tribe.getName()
+                        + " (" + tribe.getType().getLabel() + ").");
+            }
         }
     }
 }

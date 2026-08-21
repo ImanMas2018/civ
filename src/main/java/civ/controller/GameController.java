@@ -12,11 +12,16 @@ import civ.model.Unit;
 import civ.model.UnitBlueprint;
 import civ.model.Worker;
 import civ.model.combat.BattleReport;
+import civ.model.tribe.Tribe;
 import civ.view.ActionPanel;
 import civ.view.BattlePanel;
 import civ.view.HudPanel;
 import civ.view.MapPanel;
+import civ.view.TribePanel;
+import javax.swing.JDialog;
 import javax.swing.JOptionPane;
+import javax.swing.JScrollPane;
+import java.awt.Dimension;
 import java.util.List;
 
 /**
@@ -117,6 +122,13 @@ public class GameController {
             return;
         }
 
+        Tribe tribe = game.tribeAt(hex);
+        if (tribe != null && tribe.isDiscovered() && !tribe.isDestroyed()) {
+            openTribePanel(tribe);
+            game.select(null);
+            refresh();
+            return;
+        }
 
         List<Unit> here = game.unitsAt(hex);
         if (here.isEmpty()) {
@@ -264,5 +276,18 @@ public class GameController {
         mapPanel.invalidateMap();
         refresh();
     }
+
+    public void openTribePanel(Tribe tribe) {
+        JDialog dialog = new JDialog(javax.swing.SwingUtilities.getWindowAncestor(mapPanel),
+                tribe.getName(), JDialog.ModalityType.MODELESS);
+        TribePanel panel = new TribePanel(game, tribe, this);
+        JScrollPane scroll = new JScrollPane(panel);
+        scroll.setPreferredSize(new Dimension(320, 520));
+        dialog.setContentPane(scroll);
+        dialog.pack();
+        dialog.setLocationRelativeTo(mapPanel);
+        dialog.setVisible(true);
+    }
+
 
 }

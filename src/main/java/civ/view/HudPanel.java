@@ -102,7 +102,7 @@ public class HudPanel extends JPanel {
 
     public void refresh() {
         Empire empire = game.getEmpire();
-        Map<ResourceType, Integer> rate = empire.netRatePerTurn(game.getMap());
+        Map<ResourceType, Integer> rate = empire.netRatePerTurn(game.getMap(), game.getTribes());
 
         turnLabel.setText("Turn " + game.getTurn());
 

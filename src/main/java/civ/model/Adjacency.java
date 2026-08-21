@@ -79,6 +79,54 @@ public final class Adjacency {
         return n * 2;
     }
 
+    /** Allied Farmer tribe: +1 food per Farm. */
+    public static int allyFarmBonus(Empire empire, java.util.List<civ.model.tribe.Tribe> tribes) {
+        if (tribes == null) {
+            return 0;
+        }
+        boolean allied = false;
+        for (civ.model.tribe.Tribe tribe : tribes) {
+            if (tribe.isAllied() && tribe.getType() == civ.model.tribe.TribeType.FARMER) {
+                allied = true;
+                break;
+            }
+        }
+        if (!allied) {
+            return 0;
+        }
+        int farms = 0;
+        for (Building building : empire.getBuildings()) {
+            if (building.getType() == BuildingType.FARM) {
+                farms++;
+            }
+        }
+        return farms;
+    }
+
+    /** Allied Mountain tribe: +1 stone per Stone Mine. */
+    public static int allyMineBonus(Empire empire, java.util.List<civ.model.tribe.Tribe> tribes) {
+        if (tribes == null) {
+            return 0;
+        }
+        boolean allied = false;
+        for (civ.model.tribe.Tribe tribe : tribes) {
+            if (tribe.isAllied() && tribe.getType() == civ.model.tribe.TribeType.MOUNTAIN) {
+                allied = true;
+                break;
+            }
+        }
+        if (!allied) {
+            return 0;
+        }
+        int mines = 0;
+        for (Building building : empire.getBuildings()) {
+            if (building.getType() == BuildingType.STONE_MINE) {
+                mines++;
+            }
+        }
+        return mines;
+    }
+
     private static boolean touchesSea(Hex hex, GameMap map) {
         for (Hex neighbour : map.neighbours(hex)) {
             if (neighbour.getTerrain().isSea()) {

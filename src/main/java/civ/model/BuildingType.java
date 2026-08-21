@@ -26,7 +26,11 @@ public enum BuildingType {
     MONUMENT("Monument", Terrain.PLAINS, null, null,
             0, 0, 20, 20, 0, 1, ResourceType.STONE, 1, null, 1),
     MILITARY_STABLE("Military Stable", Terrain.PLAINS, null, null,
-            0, 0, 30, 10, 0, 1, ResourceType.WOOD, 1, null, 2);
+            0, 0, 30, 10, 0, 1, ResourceType.WOOD, 1, null, 2),
+    TRIBE_CAMP("Tribe Camp", null, null, null,
+            0, 0, 0, 0, 0, 0, null, 0, null, 1),
+    OUTPOST("Outpost", null, null, null,
+            0, 0, 0, 0, 0, 0, ResourceType.WOOD, 1, null, 1);
 
     private final String label;
     private final Terrain requiredTerrain;

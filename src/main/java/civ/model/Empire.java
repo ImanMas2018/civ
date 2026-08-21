@@ -18,6 +18,7 @@ public class Empire {
 
     private TownHall townHall;
     private int unitCap = 8;
+    private int happinessBonus = 0;
 
     public Stockpile getStock() {
         return stock;
@@ -108,7 +109,8 @@ public class Empire {
      * What the HUD shows as "+3 per turn". Recomputed from scratch every time
      * it is asked, so it can never drift out of sync with reality.
      */
-    public Map<ResourceType, Integer> netRatePerTurn(GameMap map) {
+    public Map<ResourceType, Integer> netRatePerTurn(GameMap map,
+                                                     java.util.List<civ.model.tribe.Tribe> tribes) {
         Map<ResourceType, Integer> rate = new EnumMap<>(ResourceType.class);
         for (ResourceType type : ResourceType.values()) {
             rate.put(type, 0);
@@ -129,11 +131,18 @@ public class Empire {
         }
 
         rate.put(ResourceType.FOOD,
-                rate.get(ResourceType.FOOD) + Adjacency.farmPairs(this, map) - units.size());
+                rate.get(ResourceType.FOOD) + Adjacency.farmPairs(this, map)
+                        + Adjacency.allyFarmBonus(this, tribes) - units.size());
+        rate.put(ResourceType.STONE,
+                rate.get(ResourceType.STONE) + Adjacency.allyMineBonus(this, tribes));
         return rate;
     }
 
     public int happiness() {
-        return Adjacency.monumentHappiness(this);
+        return Adjacency.monumentHappiness(this) + happinessBonus;
+    }
+
+    public void addHappinessBonus(int delta) {
+        happinessBonus += delta;
     }
 }

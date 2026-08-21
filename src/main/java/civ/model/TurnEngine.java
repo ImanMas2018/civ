@@ -21,6 +21,8 @@ public class TurnEngine {
 
         game.nextTurn();
         refreshUnits(game, empire);
+        game.runTribeTurns();
+
         // Future systems (seasons, disasters, autosave) subscribe here.
         // Do not call them from this class — that would invert the dependency.
         game.getBus().publish(GameEvent.TURN_ENDED, game);
@@ -63,6 +65,14 @@ public class TurnEngine {
         int farmBonus = Adjacency.farmPairs(empire, game.getMap());
         if (farmBonus > 0) {
             empire.getStock().add(ResourceType.FOOD, farmBonus);
+        }
+        int allyFood = Adjacency.allyFarmBonus(empire, game.getTribes());
+        if (allyFood > 0) {
+            empire.getStock().add(ResourceType.FOOD, allyFood);
+        }
+        int allyStone = Adjacency.allyMineBonus(empire, game.getTribes());
+        if (allyStone > 0) {
+            empire.getStock().add(ResourceType.STONE, allyStone);
         }
     }
 
