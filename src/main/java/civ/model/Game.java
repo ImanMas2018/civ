@@ -15,6 +15,8 @@ import civ.model.event.EventBus;
 import civ.model.event.GameEvent;
 import civ.model.factory.BuildingFactory;
 import civ.model.factory.UnitFactory;
+import civ.model.trade.TradeService;
+import civ.model.trade.TradeTracker;
 import civ.model.tribe.Quest;
 import civ.model.tribe.QuestStatus;
 import civ.model.tribe.Tribe;
@@ -40,6 +42,8 @@ public class Game {
     private final UnitFactory unitFactory = new UnitFactory(this);
     private final BuildingFactory buildingFactory = new BuildingFactory(bus);
     private final Battle battle;
+    private final TradeTracker tradeTracker = new TradeTracker();
+    private final TradeService tradeService = new TradeService();
     private final TribeTurnBehaviour tribeBehaviour = new TribeTurnBehaviour();
     private final List<MilitaryUnit> hostiles = new ArrayList<>();
     private final List<Tribe> tribes = new ArrayList<>();
@@ -95,6 +99,7 @@ public class Game {
             addUnit(new Archer(ring.get(4).getCol(), ring.get(4).getRow()));
         }
         spawnHostiles();
+        placeTradingPost();
         tribes.addAll(new TribePlacer(random).place(map, centreCol, centreRow));
 
         empire.getStock().add(ResourceType.FOOD, 999);
@@ -127,7 +132,13 @@ public class Game {
         return tribes;
     }
 
+    public TradeTracker getTradeTracker() {
+        return tradeTracker;
+    }
 
+    public TradeService getTradeService() {
+        return tradeService;
+    }
 
     public boolean isNextDockHalfPrice() {
         return nextDockHalfPrice;
@@ -389,7 +400,7 @@ public class Game {
         if (type == BuildingType.DOCK && !isCoastal(hex)) {
             return false;
         }
-        if (type == BuildingType.TRIBE_CAMP
+        if (type == BuildingType.TRADING_POST || type == BuildingType.TRIBE_CAMP
                 || type == BuildingType.OUTPOST || type == BuildingType.TOWN_HALL) {
             return false;
         }
@@ -595,7 +606,8 @@ public class Game {
         if (building instanceof TownHall) {
             return false;
         }
-        if (building != null && building.getType() == BuildingType.TRIBE_CAMP) {
+        if (building != null && (building.getType() == BuildingType.TRIBE_CAMP
+                || building.getType() == BuildingType.TRADING_POST)) {
             return false;
         }
         boolean hasBuilding = building != null && hex.isOwned();
@@ -1157,6 +1169,28 @@ public class Game {
         bus.publish(GameEvent.BUILDING_DESTROYED, building);
     }
 
+    private void placeTradingPost() {
+        for (int col = 0; col < map.getCols(); col++) {
+            for (int row = 0; row < map.getRows(); row++) {
+                Hex hex = map.get(col, row);
+                if (hex == null || !hex.getTerrain().isLand() || hex.isOwned()) {
+                    continue;
+                }
+                if (hex.getBuilding() != null) {
+                    continue;
+                }
+                int distance = HexGeometry.distance(centreCol, centreRow, col, row);
+                if (distance < 4 || distance > 8) {
+                    continue;
+                }
+                if (hex.getTerrain() == Terrain.PLAINS || hex.getTerrain() == Terrain.GRASSLAND) {
+                    TradingPost post = new TradingPost(hex);
+                    hex.setBuilding(post);
+                    return;
+                }
+            }
+        }
+    }
 
     private void noteAggressionFromAttack(Hex to, List<MilitaryUnit> defenders) {
         Tribe tribe = tribeAt(to);
@@ -1337,7 +1371,29 @@ public class Game {
         tribe.getQuest().deliver(this, tribe);
     }
 
+    public boolean hasBazaar() {
+        for (Building building : empire.getBuildings()) {
+            if (building.getType() == BuildingType.BAZAAR) {
+                return true;
+            }
+        }
+        return false;
+    }
 
+    public TradingPost findOwnedTradingPost() {
+        for (int col = 0; col < map.getCols(); col++) {
+            for (int row = 0; row < map.getRows(); row++) {
+                Hex hex = map.get(col, row);
+                if (hex == null || !hex.isOwned()) {
+                    continue;
+                }
+                if (hex.getBuilding() instanceof TradingPost) {
+                    return (TradingPost) hex.getBuilding();
+                }
+            }
+        }
+        return null;
+    }
 
     public void revealAround(Unit unit) {
         Hex centre = hexOf(unit);

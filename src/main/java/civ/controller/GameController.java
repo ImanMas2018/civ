@@ -289,5 +289,16 @@ public class GameController {
         dialog.setVisible(true);
     }
 
+    public void openBazaar() {
+        civ.view.TradeDialog.showBazaar(mapPanel, game, this::refresh);
+    }
 
+    public void openTradingPost() {
+        if (game.findOwnedTradingPost() == null) {
+            JOptionPane.showMessageDialog(mapPanel,
+                    "Claim the Trading Post hex inside your border first.");
+            return;
+        }
+        civ.view.TradeDialog.showTradingPost(mapPanel, game, this::refresh);
+    }
 }

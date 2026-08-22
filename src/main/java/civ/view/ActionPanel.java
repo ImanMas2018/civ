@@ -122,6 +122,7 @@ public class ActionPanel extends JPanel implements Scrollable {
                         () -> controller.startPlaceWall());
                 for (BuildingType type : BuildingType.values()) {
                     if (type == BuildingType.TOWN_HALL
+                            || type == BuildingType.TRADING_POST
                             || type == BuildingType.TRIBE_CAMP
                             || type == BuildingType.OUTPOST) {
                         continue;
@@ -183,6 +184,25 @@ public class ActionPanel extends JPanel implements Scrollable {
                 }
             }
         }
+
+        add(Box.createVerticalStrut(12));
+        addTitle("Trade");
+        addButton("Open Bazaar",
+                game.hasBazaar()
+                        && !game.getTradeTracker().alreadyTradedThisTurn(
+                        new civ.model.trade.BazaarTrade(1)),
+                game.hasBazaar()
+                        ? "Already used the Bazaar this turn."
+                        : "Build a Bazaar (Town Hall level 2).",
+                () -> controller.openBazaar());
+        addButton("Trading Post",
+                game.findOwnedTradingPost() != null
+                        && !game.getTradeTracker().alreadyTradedThisTurn(
+                        new civ.model.trade.TradingPostTrade()),
+                game.findOwnedTradingPost() == null
+                        ? "Own the Trading Post hex first."
+                        : "Already used the Trading Post this turn.",
+                () -> controller.openTradingPost());
 
         java.util.List<civ.model.tribe.Tribe> known = new java.util.ArrayList<>();
         for (civ.model.tribe.Tribe tribe : game.getTribes()) {

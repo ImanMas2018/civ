@@ -487,6 +487,8 @@ public class MapPanel extends JPanel {
                 ? MARKER_FILL
                 : building.getType() == BuildingType.TRIBE_CAMP
                 ? new Color(180, 90, 70)
+                : building.getType() == BuildingType.TRADING_POST
+                ? new Color(200, 180, 90)
                 : new Color(200, 160, 100));
         g2.fillRect((int) (cx - size / 2.0), (int) (cy - size / 2.0), size, size);
         g2.setColor(Color.BLACK);

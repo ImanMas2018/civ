@@ -77,10 +77,13 @@ public class TribePanel extends JPanel {
                 giftOk ? null : tribe.getState().lockReason(),
                 this::gift);
 
-        boolean tradeOk = false;
+        boolean tradeOk = tribe.getState().allowsTrade()
+                && tribe.getType() != TribeType.WARRIOR
+                && !game.getTradeTracker().alreadyTradedThisTurn(
+                new civ.model.trade.TribeTrade(tribe));
         addButton("Trade…", tradeOk,
-                "Trade is not available yet.",
-                () -> { });
+                tradeLockReason(tradeOk),
+                () -> TradeDialog.showTribe(this, game, tribe, controller::refresh));
 
         boolean takeOk = tribe.getState().allowsQuest()
                 && !tribe.isQuestBlocked()
@@ -146,6 +149,19 @@ public class TribePanel extends JPanel {
 
         revalidate();
         repaint();
+    }
+
+    private String tradeLockReason(boolean ok) {
+        if (ok) {
+            return null;
+        }
+        if (tribe.getType() == TribeType.WARRIOR) {
+            return "The Warrior tribe does not trade resources.";
+        }
+        if (game.getTradeTracker().alreadyTradedThisTurn(new civ.model.trade.TribeTrade(tribe))) {
+            return "Already traded with this tribe this turn.";
+        }
+        return tribe.getState().lockReason();
     }
 
     private String questLockReason() {

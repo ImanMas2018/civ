@@ -27,6 +27,8 @@ public enum BuildingType {
             0, 0, 20, 20, 0, 1, ResourceType.STONE, 1, null, 1),
     MILITARY_STABLE("Military Stable", Terrain.PLAINS, null, null,
             0, 0, 30, 10, 0, 1, ResourceType.WOOD, 1, null, 2),
+    TRADING_POST("Trading Post", null, null, null,
+            0, 0, 0, 0, 0, 0, null, 0, null, 1),
     TRIBE_CAMP("Tribe Camp", null, null, null,
             0, 0, 0, 0, 0, 0, null, 0, null, 1),
     OUTPOST("Outpost", null, null, null,

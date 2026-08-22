@@ -6,6 +6,7 @@ import civ.model.Hex;
 import civ.model.Outpost;
 import civ.model.ProductionBuilding;
 import civ.model.TownHall;
+import civ.model.TradingPost;
 import civ.model.event.EventBus;
 import civ.model.event.GameEvent;
 
@@ -22,6 +23,8 @@ public class BuildingFactory {
         Building building;
         if (type == BuildingType.TOWN_HALL) {
             building = new TownHall(hex);
+        } else if (type == BuildingType.TRADING_POST) {
+            building = new TradingPost(hex);
         } else if (type == BuildingType.OUTPOST) {
             building = new Outpost(hex);
         } else {

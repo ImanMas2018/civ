@@ -21,6 +21,7 @@ public class TurnEngine {
 
         game.nextTurn();
         refreshUnits(game, empire);
+        game.getTradeTracker().clearTurn();
         game.runTribeTurns();
 
         // Future systems (seasons, disasters, autosave) subscribe here.
