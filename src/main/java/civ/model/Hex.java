@@ -12,6 +12,7 @@ public class Hex {
     private boolean discovered = false;
     private boolean owned = false;
     private boolean road = false;
+    private boolean blocked = false;
     private Building building;
 
     public Hex(int col, int row, Terrain terrain, ResourceType deposit, int depositAmount) {
@@ -56,6 +57,14 @@ public class Hex {
 
     public void setRoad(boolean road) {
         this.road = road;
+    }
+
+    public boolean isBlocked() {
+        return blocked;
+    }
+
+    public void setBlocked(boolean blocked) {
+        this.blocked = blocked;
     }
 
     public boolean hasResource() {

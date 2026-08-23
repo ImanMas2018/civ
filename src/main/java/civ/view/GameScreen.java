@@ -45,6 +45,25 @@ public class GameScreen extends JPanel {
             controller.refresh();
         });
         game.getBus().subscribe(GameEvent.RELATION_CHANGED, payload -> controller.refresh());
+        game.getBus().subscribe(GameEvent.SEASON_CHANGED, payload -> {
+            mapPanel.onSeasonChanged();
+            controller.refresh();
+        });
+        game.getBus().subscribe(GameEvent.DISASTER_HAPPENED, payload -> {
+            civ.model.world.DisasterEffect effect = game.getLastDisaster();
+            if (effect == null) {
+                controller.refresh();
+                return;
+            }
+            game.setDisasterBusy(true);
+            mapPanel.invalidateMap();
+            mapPanel.playDisaster(effect, () -> {
+                game.setDisasterBusy(false);
+                mapPanel.invalidateMap();
+                controller.refresh();
+            });
+            controller.refresh();
+        });
 
         add(hudPanel, BorderLayout.NORTH);
         add(mapPanel, BorderLayout.CENTER);

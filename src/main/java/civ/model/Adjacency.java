@@ -69,17 +69,6 @@ public final class Adjacency {
         }
     }
 
-    public static int monumentHappiness(Empire empire) {
-        int n = 0;
-        for (Building building : empire.getBuildings()) {
-            if (building.getType() == BuildingType.MONUMENT) {
-                n++;
-            }
-        }
-        return n * 2;
-    }
-
-    /** Allied Farmer tribe: +1 food per Farm. */
     public static int allyFarmBonus(Empire empire, java.util.List<civ.model.tribe.Tribe> tribes) {
         if (tribes == null) {
             return 0;

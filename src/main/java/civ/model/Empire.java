@@ -1,5 +1,6 @@
 package civ.model;
 
+import civ.model.world.Happiness;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.EnumSet;
@@ -15,10 +16,10 @@ public class Empire {
     private final List<Unit> units = new ArrayList<>();
     private final List<Building> buildings = new ArrayList<>();
     private final Set<Tech> techs = EnumSet.noneOf(Tech.class);
+    private final Happiness happiness = new Happiness();
 
     private TownHall townHall;
     private int unitCap = 8;
-    private int happinessBonus = 0;
 
     public Stockpile getStock() {
         return stock;
@@ -49,6 +50,10 @@ public class Empire {
         unitCap += by;
     }
 
+    public void setUnitCap(int unitCap) {
+        this.unitCap = unitCap;
+    }
+
     public boolean hasTech(Tech tech) {
         return techs.contains(tech);
     }
@@ -61,6 +66,10 @@ public class Empire {
         if (tech == Tech.DEFENSIVE_ARCHITECTURE && townHall != null) {
             townHall.applyDefensiveArchitecture();
         }
+    }
+
+    public Set<Tech> getTechs() {
+        return techs;
     }
 
     public boolean canResearch(Tech tech) {
@@ -138,11 +147,15 @@ public class Empire {
         return rate;
     }
 
+    public Happiness getHappiness() {
+        return happiness;
+    }
+
     public int happiness() {
-        return Adjacency.monumentHappiness(this) + happinessBonus;
+        return happiness.getValue();
     }
 
     public void addHappinessBonus(int delta) {
-        happinessBonus += delta;
+        happiness.add(delta);
     }
 }

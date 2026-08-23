@@ -39,7 +39,8 @@ public class TurnEngine {
                 continue;
             }
 
-            int amount = building.outputPerTurn(empire, game.getMap());
+            int raw = building.outputPerTurn(empire, game.getMap());
+            int amount = game.adjustProduction(building, raw);
             if (amount <= 0) {
                 continue;
             }
@@ -52,7 +53,12 @@ public class TurnEngine {
                     game.addLog("The Dock has no more fish nearby.");
                 }
             } else {
-                building.getHex().takeResource(amount - Adjacency.extraOutput(building, game.getMap()));
+                int extracted = Math.min(
+                        building.getHex().getDepositAmount(),
+                        Math.max(0, raw - Adjacency.extraOutput(building, game.getMap())));
+                if (extracted > 0) {
+                    building.getHex().takeResource(extracted);
+                }
             }
             empire.getStock().add(output, amount);
 
@@ -129,6 +135,7 @@ public class TurnEngine {
 
     private void refreshUnits(Game game, Empire empire) {
         int penalty = game.isStarving() ? 1 : 0;
+        penalty += empire.getHappiness().apPenalty();
         for (Unit unit : empire.getUnits()) {
             unit.refresh(penalty);
         }

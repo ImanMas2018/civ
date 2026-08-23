@@ -116,15 +116,28 @@ public class MapPanel extends JPanel {
     private int fromRow;
     private double progress;
 
+    private final SeasonOverlay seasonOverlay = new SeasonOverlay();
+    private final DisasterOverlay disasterOverlay = new DisasterOverlay();
+    private Timer weatherTimer;
+
     public MapPanel(Game game) {
         this.game = game;
         setBackground(BG);
         setFocusable(true);
         installMouse();
         installKeys();
+        seasonOverlay.setSeason(game.getSeason());
+        weatherTimer = new Timer(50, e -> {
+            seasonOverlay.tick();
+            if (seasonOverlay.isActive() || disasterOverlay.isPlaying()) {
+                repaint();
+            }
+        });
+        weatherTimer.start();
         addComponentListener(new ComponentAdapter() {
             @Override
             public void componentResized(ComponentEvent e) {
+                seasonOverlay.resize(getWidth(), getHeight());
                 if (!cameraReady && getWidth() > 0 && getHeight() > 0) {
                     centerCameraOnTownHall();
                     cameraReady = true;
@@ -139,7 +152,26 @@ public class MapPanel extends JPanel {
     }
 
     public boolean isAnimating() {
-        return movingUnit != null;
+        return movingUnit != null || disasterOverlay.isPlaying();
+    }
+
+    public void onSeasonChanged() {
+        seasonOverlay.setSeason(game.getSeason());
+        seasonOverlay.resize(getWidth(), getHeight());
+        repaint();
+    }
+
+    public void playDisaster(civ.model.world.DisasterEffect effect, Runnable onDone) {
+        disasterOverlay.play(effect, () -> {
+            if (onDone != null) {
+                onDone.run();
+            }
+            repaint();
+        }, (col, row) -> new double[] {
+                HexGeometry.centerX(col, row, HEX_SIZE),
+                HexGeometry.centerY(col, row, HEX_SIZE)
+        });
+        repaint();
     }
 
     private void centerCameraOnTownHall() {
@@ -275,6 +307,10 @@ public class MapPanel extends JPanel {
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g2.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
 
+        int shakeX = disasterOverlay.getShakeX();
+        int shakeY = disasterOverlay.getShakeY();
+        g2.translate(shakeX, shakeY);
+
         g2.drawImage(mapCache(),
                 (int) Math.round(-cameraX * zoom()),
                 (int) Math.round(-cameraY * zoom()),
@@ -293,6 +329,9 @@ public class MapPanel extends JPanel {
         if (selected != null) {
             drawUnit(g2, selected);
         }
+        disasterOverlay.paint(g2, HEX_SIZE, cameraX, cameraY, zoom());
+        g2.translate(-shakeX, -shakeY);
+        seasonOverlay.paint(g2);
         g2.dispose();
 
         g.drawImage(target, 0, 0, null);
@@ -374,6 +413,14 @@ public class MapPanel extends JPanel {
             g2.setColor(OWNED_EDGE);
             g2.setStroke(THICK);
             g2.draw(hexShape);
+        }
+
+        if (hex.isBlocked()) {
+            double crack = screenHexSize() * 0.45;
+            g2.setColor(new Color(60, 40, 30, 160));
+            g2.setStroke(new BasicStroke(2.0f));
+            g2.drawLine((int) (cx - crack), (int) cy, (int) (cx + crack), (int) (cy + crack / 2));
+            g2.drawLine((int) cx, (int) (cy - crack), (int) (cx + crack / 2), (int) (cy + crack));
         }
 
         Building building = hex.getBuilding();

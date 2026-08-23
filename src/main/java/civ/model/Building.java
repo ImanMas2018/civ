@@ -10,6 +10,8 @@ public abstract class Building {
     private int unpaidTurns = 0;
     private int hp = DEFAULT_HP;
     private int maxHp = DEFAULT_HP;
+    /** Inclusive turn number through which production is paused (flood). 0 = not paused. */
+    private int pausedUntilTurn = 0;
 
     protected Building(BuildingType type, Hex hex) {
         this.type = type;
@@ -67,6 +69,22 @@ public abstract class Building {
 
     protected void heal(int amount) {
         hp = Math.min(maxHp, hp + amount);
+    }
+
+    public void pauseUntil(int turn) {
+        pausedUntilTurn = Math.max(pausedUntilTurn, turn);
+    }
+
+    public int getPausedUntilTurn() {
+        return pausedUntilTurn;
+    }
+
+    public void setPausedUntilTurn(int turn) {
+        pausedUntilTurn = turn;
+    }
+
+    public boolean isPaused(int currentTurn) {
+        return pausedUntilTurn > 0 && currentTurn <= pausedUntilTurn;
     }
 
     /** How much of {@code getType().getProduces()} this building makes this turn. */

@@ -271,7 +271,12 @@ public class GameController {
                 return;
             }
         }
-        turnEngine.endTurn(game);
+        game.setProcessingTurn(true);
+        try {
+            turnEngine.endTurn(game);
+        } finally {
+            game.setProcessingTurn(false);
+        }
         game.select(null);
         mapPanel.invalidateMap();
         refresh();

@@ -25,6 +25,9 @@ import civ.model.tribe.TribeGuard;
 import civ.model.tribe.TribePlacer;
 import civ.model.tribe.TribeTurnBehaviour;
 import civ.model.tribe.TribeType;
+import civ.model.world.DisasterEffect;
+import civ.model.world.DisasterRoller;
+import civ.model.world.Season;
 import civ.util.HexGeometry;
 import java.util.ArrayList;
 import java.util.List;
@@ -45,11 +48,13 @@ public class Game {
     private final TradeTracker tradeTracker = new TradeTracker();
     private final TradeService tradeService = new TradeService();
     private final TribeTurnBehaviour tribeBehaviour = new TribeTurnBehaviour();
+    private final DisasterRoller disasterRoller;
     private final List<MilitaryUnit> hostiles = new ArrayList<>();
     private final List<Tribe> tribes = new ArrayList<>();
     private final int centreCol;
     private final int centreRow;
     private final Random random;
+    private final long mapSeed;
 
     private int turn = 1;
     private Unit selected;
@@ -57,6 +62,11 @@ public class Game {
     private boolean starving = false;
     private boolean nextDockHalfPrice = false;
     private final List<String> log = new ArrayList<>();
+    private Season lastSeason = Season.SPRING;
+    private DisasterEffect lastDisaster;
+    private int lastBearTurn = -999;
+    private boolean processingTurn = false;
+    private boolean disasterBusy = false;
 
     private List<MilitaryUnit> pendingAttackers;
     private List<MilitaryUnit> pendingDefenders;
@@ -64,14 +74,51 @@ public class Game {
     private Tribe pendingAttackedTribe;
 
     public Game(long seed) {
+        this.mapSeed = seed;
         this.map = new GameMap(22, 18);
         this.centreCol = map.getCols() / 2;
         this.centreRow = map.getRows() / 2;
         this.random = new Random(seed);
         this.battle = new Battle(new Dice(random));
+        this.disasterRoller = new DisasterRoller(random);
 
         new MapGenerator(seed).fill(map, centreCol, centreRow);
         setUpStartingPosition();
+        wireWorldSystems();
+    }
+
+    /**
+     * Spec order after tribes (already run in TurnEngine): season → disaster → bears.
+     * Autosave registers later in save/load.
+     */
+    private void wireWorldSystems() {
+        bus.subscribe(GameEvent.BUILDING_PLACED, payload -> {
+            Building building = (Building) payload;
+            if (building.getType() == BuildingType.MONUMENT) {
+                empire.getHappiness().add(2);
+            } else if (building.getType() == BuildingType.SETTLEMENT) {
+                empire.getHappiness().add(-1);
+            }
+            syncGarrisonHappiness();
+        });
+        bus.subscribe(GameEvent.BUILDING_DESTROYED, payload -> {
+            Building building = (Building) payload;
+            if (building.getType() == BuildingType.MONUMENT) {
+                empire.getHappiness().add(-2);
+            }
+            syncGarrisonHappiness();
+        });
+        bus.subscribe(GameEvent.TURN_ENDED, payload -> {
+            Season now = Season.forTurn(turn);
+            if (now != lastSeason) {
+                lastSeason = now;
+                bus.publish(GameEvent.SEASON_CHANGED, now);
+                addLog("Season changed to " + now.getLabel() + ".");
+            }
+            syncGarrisonHappiness();
+            disasterRoller.maybeStrike(this);
+            runBearBehaviour();
+        });
     }
 
     private void setUpStartingPosition() {
@@ -111,6 +158,11 @@ public class Game {
     public void addUnit(Unit unit) {
         empire.getUnits().add(unit);
         revealAround(unit);
+        if (unit.isMilitary() && empire.countMilitary() >= empire.getMilitaryCap()) {
+            empire.getHappiness().noteMilitaryCapReached();
+            addLog("Military unit cap reached: −1 happiness.");
+        }
+        syncGarrisonHappiness();
     }
 
     public void removeUnit(Unit unit) {
@@ -146,6 +198,72 @@ public class Game {
 
     public void setNextDockHalfPrice(boolean nextDockHalfPrice) {
         this.nextDockHalfPrice = nextDockHalfPrice;
+    }
+
+    public Random getRandom() {
+        return random;
+    }
+
+    public long getMapSeed() {
+        return mapSeed;
+    }
+
+    public Season getSeason() {
+        return Season.forTurn(turn);
+    }
+
+    public DisasterEffect getLastDisaster() {
+        return lastDisaster;
+    }
+
+    public void setLastDisaster(DisasterEffect lastDisaster) {
+        this.lastDisaster = lastDisaster;
+    }
+
+    public int getLastBearTurn() {
+        return lastBearTurn;
+    }
+
+    public void setLastBearTurn(int lastBearTurn) {
+        this.lastBearTurn = lastBearTurn;
+    }
+
+    public boolean isProcessingTurn() {
+        return processingTurn;
+    }
+
+    public void setProcessingTurn(boolean processingTurn) {
+        this.processingTurn = processingTurn;
+    }
+
+    public boolean isDisasterBusy() {
+        return disasterBusy;
+    }
+
+    public void setDisasterBusy(boolean disasterBusy) {
+        this.disasterBusy = disasterBusy;
+    }
+
+    public boolean hasPendingBattle() {
+        return pendingReport != null;
+    }
+
+    /** Save is locked during battle, end-of-turn, or disaster animation. */
+    public boolean isSaveLocked() {
+        return processingTurn || disasterBusy || pendingReport != null;
+    }
+
+    public String saveLockReason() {
+        if (pendingReport != null) {
+            return "A battle is in progress.";
+        }
+        if (processingTurn) {
+            return "End-of-turn processing.";
+        }
+        if (disasterBusy) {
+            return "A disaster is unfolding.";
+        }
+        return null;
     }
 
     public GameMap getMap() {
@@ -301,8 +419,12 @@ public class Game {
         if (!to.getTerrain().isPassable()) {
             return Integer.MAX_VALUE;
         }
+        if (to.isBlocked()) {
+            return Integer.MAX_VALUE;
+        }
+        Season season = Season.forTurn(turn);
         if (to.getTerrain().isSea()) {
-            return Math.max(1, unit.getAp());
+            return Math.max(1, unit.getAp()) + season.waterMovePenalty();
         }
 
         int cost = to.getTerrain().getMoveCost();
@@ -314,6 +436,7 @@ public class Game {
             boolean bridged = from.hasRoad() && to.hasRoad();
             cost += bridged ? 0 : 2;
         }
+        cost += season.landMovePenalty();
         return Math.max(1, cost);
     }
 
@@ -364,6 +487,9 @@ public class Game {
             return false;
         }
         if (!target.getTerrain().isPassable()) {
+            return false;
+        }
+        if (target.isBlocked()) {
             return false;
         }
         if (target.getTerrain().isSea()) {
@@ -497,11 +623,13 @@ public class Game {
             unit.moveTo(target);
             unit.emptyAp();
             revealAround(unit);
+            syncGarrisonHappiness();
             return;
         }
         unit.spend(moveCost(unit, target));
         unit.moveTo(target);
         revealAround(unit);
+        syncGarrisonHappiness();
     }
 
     public void build(Builder builder, BuildingType type, Hex hex) {
@@ -1090,7 +1218,7 @@ public class Game {
             if (unit instanceof Barbarian) {
                 barbarian = true;
             }
-            if (unit instanceof WildAnimal) {
+            if (unit instanceof WildAnimal || unit instanceof Bear) {
                 animal = true;
             }
             if (unit instanceof TribeGuard) {
@@ -1285,6 +1413,183 @@ public class Game {
                 break;
         }
         addLog("Loot claimed from " + tribe.getName() + ".");
+    }
+
+    public void destroyBuilding(Building building, String reason) {
+        if (building == null || building instanceof TownHall) {
+            return;
+        }
+        if (building instanceof TribeCamp) {
+            conquerTribe(((TribeCamp) building).getTribe());
+            return;
+        }
+        removeBuildingFromMap(building);
+        addLog("The " + building.getType().getLabel() + " was " + reason + ".");
+    }
+
+    public void killUnit(Unit unit, String reason) {
+        if (unit instanceof MilitaryUnit) {
+            buryUnit((MilitaryUnit) unit);
+            return;
+        }
+        if (unit instanceof Worker) {
+            Worker worker = (Worker) unit;
+            if (worker.getStation() != null) {
+                worker.getStation().removeWorker(worker);
+            }
+        }
+        removeUnit(unit);
+        addLog(unit.getTypeName() + " was " + reason + ".");
+        syncGarrisonHappiness();
+    }
+
+    /**
+     * Season + happiness modifiers applied on top of a building's raw output.
+     */
+    public int adjustProduction(Building building, int raw) {
+        if (building.isPaused(turn)) {
+            return 0;
+        }
+        int amount = raw;
+        if (building instanceof ProductionBuilding) {
+            int penalty = empire.getHappiness().workerOutputPenalty();
+            if (penalty > 0) {
+                amount = Math.max(0, amount
+                        - ((ProductionBuilding) building).getWorkers().size() * penalty);
+            }
+        }
+        BuildingType type = building.getType();
+        if (type == BuildingType.FARM || type == BuildingType.STABLE) {
+            amount = Math.max(0, amount + Season.forTurn(turn).farmFoodBonus());
+        }
+        amount = (int) Math.floor(amount * empire.getHappiness().productionMultiplier());
+        return amount;
+    }
+
+    public void syncGarrisonHappiness() {
+        TownHall hall = empire.getTownHall();
+        if (hall == null) {
+            empire.getHappiness().setGarrisonBonus(0);
+            return;
+        }
+        int garrison = 0;
+        for (Unit unit : unitsAt(hall.getHex())) {
+            if (unit.isMilitary()) {
+                garrison++;
+            }
+        }
+        empire.getHappiness().setGarrisonBonus(garrison);
+    }
+
+    /** Bears act: hunt civilians first, dice-fight military, leave when no prey within 3. */
+    public void runBearBehaviour() {
+        for (MilitaryUnit hostile : new ArrayList<>(hostiles)) {
+            if (!(hostile instanceof Bear)) {
+                continue;
+            }
+            Bear bear = (Bear) hostile;
+            Hex here = hexOf(bear);
+            if (here == null) {
+                continue;
+            }
+
+            Unit civilian = nearestCivilian(here, 3);
+            MilitaryUnit military = nearestPlayerMilitary(here, 3);
+            if (civilian == null && military == null) {
+                hostiles.remove(bear);
+                addLog("The bears left the map.");
+                continue;
+            }
+
+            Unit prey = civilian != null ? civilian : military;
+            Hex preyHex = hexOf(prey);
+            int distance = HexGeometry.distance(here.getCol(), here.getRow(),
+                    preyHex.getCol(), preyHex.getRow());
+            if (distance > 1) {
+                Hex step = stepToward(here, preyHex);
+                if (step != null && !step.isBlocked() && step.getTerrain().isLand()
+                        && hostilesAt(step).isEmpty() && bear.canSpend(1)) {
+                    bear.spend(1);
+                    bear.moveTo(step);
+                    step.setDiscovered(true);
+                }
+                continue;
+            }
+
+            if (prey instanceof MilitaryUnit) {
+                List<MilitaryUnit> attackers = new ArrayList<>();
+                attackers.add(bear);
+                List<MilitaryUnit> defenders = new ArrayList<>();
+                defenders.add((MilitaryUnit) prey);
+                BattleReport report = battle.resolve(1, 2, 0);
+                DamageHandler chain = hitChain();
+                chain.handle(defenders, report.getHitsOnDefender());
+                chain.handle(attackers, report.getHitsOnAttacker());
+                for (MilitaryUnit unit : new ArrayList<>(defenders)) {
+                    buryIfDead(unit);
+                }
+                for (MilitaryUnit unit : new ArrayList<>(attackers)) {
+                    buryIfDead(unit);
+                }
+                addLog("A bear attacked your " + prey.getTypeName() + "!");
+            } else {
+                prey.damageBody(25);
+                prey.emptyAp();
+                if (prey.isBodyDead()) {
+                    killUnit(prey, "mauled by a bear");
+                } else {
+                    addLog("A bear mauled your " + prey.getTypeName() + "!");
+                }
+            }
+        }
+    }
+
+    private Unit nearestCivilian(Hex from, int radius) {
+        Unit best = null;
+        int bestDist = Integer.MAX_VALUE;
+        for (Unit unit : empire.getUnits()) {
+            if (unit.isMilitary() || unit.isBusy()) {
+                continue;
+            }
+            int dist = HexGeometry.distance(from.getCol(), from.getRow(),
+                    unit.getCol(), unit.getRow());
+            if (dist <= radius && dist < bestDist) {
+                bestDist = dist;
+                best = unit;
+            }
+        }
+        return best;
+    }
+
+    private MilitaryUnit nearestPlayerMilitary(Hex from, int radius) {
+        MilitaryUnit best = null;
+        int bestDist = Integer.MAX_VALUE;
+        for (Unit unit : empire.getUnits()) {
+            if (!(unit instanceof MilitaryUnit)) {
+                continue;
+            }
+            int dist = HexGeometry.distance(from.getCol(), from.getRow(),
+                    unit.getCol(), unit.getRow());
+            if (dist <= radius && dist < bestDist) {
+                bestDist = dist;
+                best = (MilitaryUnit) unit;
+            }
+        }
+        return best;
+    }
+
+    private Hex stepToward(Hex from, Hex to) {
+        Hex best = null;
+        int bestDist = HexGeometry.distance(from.getCol(), from.getRow(), to.getCol(), to.getRow());
+        for (Hex neighbour : map.neighbours(from)) {
+            int dist = HexGeometry.distance(neighbour.getCol(), neighbour.getRow(),
+                    to.getCol(), to.getRow());
+            if (dist < bestDist) {
+                bestDist = dist;
+                best = neighbour;
+            }
+        }
+        return best;
     }
 
     public void runTribeTurns() {

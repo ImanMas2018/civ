@@ -20,6 +20,7 @@ public abstract class MilitaryUnit extends Unit {
         this.combatHp = combatHp;
         this.attackPower = attackPower;
         this.attackRange = attackRange;
+        setBodyHp(80, 80);
     }
 
     @Override
@@ -50,6 +51,10 @@ public abstract class MilitaryUnit extends Unit {
 
     public void takeCombatHit() {
         combatHp--;
+    }
+
+    public void setCombatHp(int combatHp) {
+        this.combatHp = Math.max(0, Math.min(maxCombatHp, combatHp));
     }
 
     public boolean isDead() {
