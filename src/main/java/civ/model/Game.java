@@ -44,16 +44,16 @@ public class Game {
     private final EventBus bus = new EventBus();
     private final UnitFactory unitFactory = new UnitFactory(this);
     private final BuildingFactory buildingFactory = new BuildingFactory(bus);
-    private final Battle battle;
+    private Battle battle;
     private final TradeTracker tradeTracker = new TradeTracker();
     private final TradeService tradeService = new TradeService();
     private final TribeTurnBehaviour tribeBehaviour = new TribeTurnBehaviour();
-    private final DisasterRoller disasterRoller;
+    private DisasterRoller disasterRoller;
     private final List<MilitaryUnit> hostiles = new ArrayList<>();
     private final List<Tribe> tribes = new ArrayList<>();
     private final int centreCol;
     private final int centreRow;
-    private final Random random;
+    private Random random;
     private final long mapSeed;
 
     private int turn = 1;
@@ -74,6 +74,11 @@ public class Game {
     private Tribe pendingAttackedTribe;
 
     public Game(long seed) {
+        this(seed, false);
+    }
+
+    /** {@code blank} skips starting units/tribes so a save can rebuild the world. */
+    public Game(long seed, boolean blank) {
         this.mapSeed = seed;
         this.map = new GameMap(22, 18);
         this.centreCol = map.getCols() / 2;
@@ -83,8 +88,55 @@ public class Game {
         this.disasterRoller = new DisasterRoller(random);
 
         new MapGenerator(seed).fill(map, centreCol, centreRow);
-        setUpStartingPosition();
+        if (!blank) {
+            setUpStartingPosition();
+        }
         wireWorldSystems();
+    }
+
+    public void setTurn(int turn) {
+        this.turn = Math.max(1, turn);
+        this.lastSeason = Season.forTurn(this.turn);
+    }
+
+    public void restoreRandomFromBase64(String base64) throws java.io.IOException {
+        if (base64 == null || base64.isEmpty()) {
+            return;
+        }
+        byte[] raw = java.util.Base64.getDecoder().decode(base64);
+        try (java.io.ObjectInputStream in = new java.io.ObjectInputStream(
+                new java.io.ByteArrayInputStream(raw))) {
+            Random loaded = (Random) in.readObject();
+            this.random = loaded;
+            this.battle = new Battle(new Dice(random));
+            this.disasterRoller = new DisasterRoller(random);
+        } catch (ClassNotFoundException ex) {
+            throw new java.io.IOException("Could not restore random state.", ex);
+        }
+    }
+
+    public void clearForLoad() {
+        empire.getUnits().clear();
+        empire.getBuildings().clear();
+        empire.setTownHall(null);
+        hostiles.clear();
+        tribes.clear();
+        selected = null;
+        inspected = null;
+        pendingAttackers = null;
+        pendingDefenders = null;
+        pendingReport = null;
+        pendingAttackedTribe = null;
+        lastDisaster = null;
+        log.clear();
+        for (int col = 0; col < map.getCols(); col++) {
+            for (int row = 0; row < map.getRows(); row++) {
+                Hex hex = map.get(col, row);
+                if (hex != null) {
+                    hex.setBuilding(null);
+                }
+            }
+        }
     }
 
     /**

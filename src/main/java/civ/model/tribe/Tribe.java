@@ -80,6 +80,22 @@ public class Tribe {
         discovered = true;
     }
 
+    public void setDiscovered(boolean discovered) {
+        this.discovered = discovered;
+    }
+
+    public void setQuestBlockTurns(int questBlockTurns) {
+        this.questBlockTurns = questBlockTurns;
+    }
+
+    public void setTradeBonusPercent(int tradeBonusPercent) {
+        this.tradeBonusPercent = tradeBonusPercent;
+    }
+
+    public void setDestroyed(boolean destroyed) {
+        this.destroyed = destroyed;
+    }
+
     public boolean isDestroyed() {
         return destroyed;
     }

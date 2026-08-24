@@ -42,6 +42,10 @@ public class Stockpile {
         amounts.put(type, now);
     }
 
+    public void set(ResourceType type, int amount) {
+        amounts.put(type, amount);
+    }
+
     public boolean canPay(ResourceType type, int amount) {
         return amounts.get(type) >= amount;
     }

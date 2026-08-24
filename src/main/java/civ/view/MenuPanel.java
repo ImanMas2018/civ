@@ -37,16 +37,20 @@ public class MenuPanel extends JPanel {
         title.setAlignmentX(Component.CENTER_ALIGNMENT);
 
         JButton start = makeButton("Start");
+        JButton load = makeButton("Load");
         JButton settings = makeButton("Settings");
         JButton exit = makeButton("Exit");
 
         start.addActionListener(e -> window.startNewGame());
+        load.addActionListener(e -> window.showLoadMenu());
         settings.addActionListener(e -> showSettings(window));
         exit.addActionListener(e -> confirmExit());
 
         column.add(title);
         column.add(Box.createVerticalStrut(40));
         column.add(start);
+        column.add(Box.createVerticalStrut(12));
+        column.add(load);
         column.add(Box.createVerticalStrut(12));
         column.add(settings);
         column.add(Box.createVerticalStrut(12));

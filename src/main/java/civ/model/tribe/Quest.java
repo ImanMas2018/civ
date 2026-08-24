@@ -108,6 +108,12 @@ public class Quest {
         progress = 0;
     }
 
+    public void restore(QuestStatus status, int turnsLeft, int progress) {
+        this.status = status;
+        this.turnsLeft = turnsLeft;
+        this.progress = progress;
+    }
+
     public void cancel() {
         status = QuestStatus.CANCELLED;
     }

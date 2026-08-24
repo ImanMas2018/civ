@@ -118,6 +118,18 @@ public class TownHall extends Building {
         setMaxHp(WALL_MAX_HP);
     }
 
+    public void restoreState(int level, int hp, int maxHp, int defence, boolean wall) {
+        this.level = level;
+        this.defence = defence;
+        this.defensiveWall = wall;
+        setHealth(hp, maxHp);
+    }
+
+    public void restoreQueue(Command command, int turnsLeft) {
+        this.activeCommand = command;
+        this.turnsLeft = turnsLeft;
+    }
+
     @Override
     public int outputPerTurn(Empire empire, GameMap map) {
         return 0;

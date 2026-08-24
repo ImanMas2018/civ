@@ -3,9 +3,11 @@ package civ.model.world;
 import civ.model.Building;
 import civ.model.Game;
 import civ.model.Hex;
+import civ.model.MilitaryUnit;
 import civ.model.TownHall;
 import civ.model.Unit;
-import civ.util.HexGeometry;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Radius-2 quake: units −10 body HP, Town Hall −50 HP (floor 1), cracks block hexes.

@@ -3,6 +3,7 @@ package civ.view;
 import civ.controller.GameController;
 import civ.model.Game;
 import civ.model.event.GameEvent;
+import javax.swing.JDialog;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
@@ -15,6 +16,7 @@ public class GameScreen extends JPanel {
     private final MainWindow window;
     private final Game game;
     private GameController controller;
+    private MapPanel mapPanel;
 
     public GameScreen(Game game, MainWindow window) {
         this.game = game;
@@ -22,7 +24,7 @@ public class GameScreen extends JPanel {
         setLayout(new BorderLayout());
 
         HudPanel hudPanel = new HudPanel(game);
-        MapPanel mapPanel = new MapPanel(game);
+        mapPanel = new MapPanel(game);
         ActionPanel actionPanel = new ActionPanel(game);
 
         controller = new GameController(game, mapPanel, hudPanel, actionPanel);
@@ -80,7 +82,7 @@ public class GameScreen extends JPanel {
     }
 
     /**
-     * Esc / Back: cancel attack/wall pick, then drop the selected unit, then confirm menu.
+     * Esc / Back: cancel attack/wall pick, then drop the selected unit, then pause menu.
      */
     public void goBack() {
         if (controller != null && controller.cancelTransientMode()) {
@@ -91,13 +93,22 @@ public class GameScreen extends JPanel {
             controller.refresh();
             return;
         }
-        int answer = JOptionPane.showConfirmDialog(
-                this,
-                "Return to the main menu? The current game will be lost if you start a new one.",
-                "Back",
-                JOptionPane.YES_NO_OPTION);
-        if (answer == JOptionPane.YES_OPTION) {
-            window.showMenu();
+        openPauseMenu();
+    }
+
+    private void openPauseMenu() {
+        JDialog dialog = new JDialog(window, "Pause", true);
+        dialog.setContentPane(new SaveLoadPanel(
+                window.getSaveController(),
+                game,
+                true,
+                dialog::dispose,
+                window::showMenu));
+        dialog.setSize(720, 420);
+        dialog.setLocationRelativeTo(window);
+        dialog.setVisible(true);
+        if (controller != null) {
+            controller.refresh();
         }
     }
 }

@@ -38,6 +38,10 @@ public abstract class Building {
         unpaidTurns++;
     }
 
+    public void setUnpaidTurns(int unpaidTurns) {
+        this.unpaidTurns = unpaidTurns;
+    }
+
     public boolean isCollapsed() {
         return unpaidTurns >= 3;
     }
@@ -69,6 +73,10 @@ public abstract class Building {
 
     protected void heal(int amount) {
         hp = Math.min(maxHp, hp + amount);
+    }
+
+    public void restoreHealth(int current, int max) {
+        setHealth(current, max);
     }
 
     public void pauseUntil(int turn) {

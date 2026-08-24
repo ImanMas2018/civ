@@ -32,7 +32,7 @@ public class BearAttack implements Disaster {
         Hex den = dens.get(game.getRandom().nextInt(dens.size()));
 
         int count = 1;
-        if (game.playerMilitaryNear(den, 3) >= 3) {
+        if (game.playerMilitaryNear(den, 3).size() >= 3) {
             count = 2;
         }
         count = Math.min(2, count);

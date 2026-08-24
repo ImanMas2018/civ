@@ -36,4 +36,8 @@ public class ResearchTechCommand implements Command {
     public void cancel(Game game) {
         game.addLog(getLabel() + " cancelled. Resources are lost.");
     }
+
+    public Tech getTech() {
+        return tech;
+    }
 }

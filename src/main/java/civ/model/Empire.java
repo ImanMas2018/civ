@@ -43,7 +43,9 @@ public class Empire {
 
     public void setTownHall(TownHall townHall) {
         this.townHall = townHall;
-        buildings.add(townHall);
+        if (townHall != null && !buildings.contains(townHall)) {
+            buildings.add(townHall);
+        }
     }
 
     public void raiseUnitCap(int by) {

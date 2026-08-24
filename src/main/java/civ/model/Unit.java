@@ -73,6 +73,10 @@ public abstract class Unit {
         ap -= cost;
     }
 
+    public void setAp(int ap) {
+        this.ap = Math.max(0, ap);
+    }
+
     public void emptyAp() {
         ap = 0;
     }
@@ -93,6 +97,10 @@ public abstract class Unit {
     protected void setBodyHp(int current, int max) {
         this.bodyHp = current;
         this.maxBodyHp = max;
+    }
+
+    public void restoreBodyHp(int current, int max) {
+        setBodyHp(current, max);
     }
 
     public void setBodyHpAbsolute(int current) {

@@ -79,6 +79,10 @@ public class Hex {
         depositAmount = Math.max(0, depositAmount - amount);
     }
 
+    public void setDepositAmount(int depositAmount) {
+        this.depositAmount = Math.max(0, depositAmount);
+    }
+
     public void setDiscovered(boolean discovered) {
         this.discovered = discovered;
     }

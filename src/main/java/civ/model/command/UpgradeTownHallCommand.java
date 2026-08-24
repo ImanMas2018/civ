@@ -36,4 +36,8 @@ public class UpgradeTownHallCommand implements Command {
     public void cancel(Game game) {
         game.addLog(getLabel() + " cancelled. Resources are lost.");
     }
+
+    public TownHallLevel getTarget() {
+        return target;
+    }
 }

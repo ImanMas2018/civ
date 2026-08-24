@@ -40,4 +40,8 @@ public class TrainUnitCommand implements Command {
     public void cancel(Game game) {
         game.addLog(getLabel() + " cancelled. Resources are lost.");
     }
+
+    public UnitBlueprint getBlueprint() {
+        return blueprint;
+    }
 }
