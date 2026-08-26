@@ -4,12 +4,12 @@ import civ.util.HexGeometry;
 import java.util.ArrayList;
 import java.util.List;
 
-/** The grid of hexes. Uses odd-r offset coordinates stored in a 2-D array. */
 public class GameMap {
 
     private final int cols;
     private final int rows;
     private final Hex[][] hexes;
+    private final EdgeMap edges = new EdgeMap();
 
     public GameMap(int cols, int rows) {
         this.cols = cols;
@@ -38,6 +38,14 @@ public class GameMap {
 
     public void set(Hex hex) {
         hexes[hex.getCol()][hex.getRow()] = hex;
+    }
+
+    public EdgeMap getEdges() {
+        return edges;
+    }
+
+    public Edge edgeBetween(Hex a, Hex b) {
+        return edges.find(a, b);
     }
 
     public List<Hex> neighbours(Hex hex) {

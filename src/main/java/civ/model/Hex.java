@@ -1,6 +1,5 @@
 package civ.model;
 
-/** One tile of the map. Coordinates and terrain never change; fog, ownership and deposit amount do. */
 public class Hex {
 
     private final int col;
@@ -11,6 +10,8 @@ public class Hex {
 
     private boolean discovered = false;
     private boolean owned = false;
+    private boolean road = false;
+    private boolean blocked = false;
     private Building building;
 
     public Hex(int col, int row, Terrain terrain, ResourceType deposit, int depositAmount) {
@@ -49,6 +50,22 @@ public class Hex {
         return owned;
     }
 
+    public boolean hasRoad() {
+        return road;
+    }
+
+    public void setRoad(boolean road) {
+        this.road = road;
+    }
+
+    public boolean isBlocked() {
+        return blocked;
+    }
+
+    public void setBlocked(boolean blocked) {
+        this.blocked = blocked;
+    }
+
     public boolean hasResource() {
         return deposit != null && depositAmount > 0;
     }
@@ -59,6 +76,10 @@ public class Hex {
 
     public void takeResource(int amount) {
         depositAmount = Math.max(0, depositAmount - amount);
+    }
+
+    public void setDepositAmount(int depositAmount) {
+        this.depositAmount = Math.max(0, depositAmount);
     }
 
     public void setDiscovered(boolean discovered) {

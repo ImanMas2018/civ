@@ -2,12 +2,16 @@ package civ.view;
 
 import civ.controller.GameController;
 import civ.model.BorderExpander;
+import civ.model.Builder;
 import civ.model.Building;
 import civ.model.BuildingType;
+import civ.model.Edge;
 import civ.model.Game;
 import civ.model.Hex;
+import civ.model.MilitaryUnit;
 import civ.model.ProductionBuilding;
 import civ.model.Terrain;
+import civ.model.TownHall;
 import civ.model.Unit;
 import civ.util.HexGeometry;
 import javax.swing.JPanel;
@@ -28,11 +32,9 @@ import java.awt.event.MouseMotionAdapter;
 import java.awt.event.MouseWheelEvent;
 import java.awt.geom.Path2D;
 import java.awt.image.BufferedImage;
+import java.util.ArrayList;
+import java.util.List;
 
-/**
- * Draws the hex map with fog of war, units, zoom and pan.
- * The terrain image is cached; units and move highlights are drawn every frame.
- */
 public class MapPanel extends JPanel {
 
     /** Distance from hex centre to a vertex, in world pixels (before zoom). */
@@ -49,10 +51,16 @@ public class MapPanel extends JPanel {
     private static final Color GRASSLAND = new Color(126, 176, 76);
     private static final Color FOREST = new Color(34, 102, 51);
     private static final Color MOUNTAIN = new Color(120, 118, 112);
+    private static final Color MOUNTAIN_RANGE = new Color(62, 58, 56);
+    private static final Color SEA = new Color(46, 110, 168);
+    private static final Color SEA_FISH = new Color(36, 88, 148);
     private static final Color PLAINS_RES = PLAINS.darker();
     private static final Color GRASSLAND_RES = GRASSLAND.darker();
     private static final Color FOREST_RES = FOREST.darker();
     private static final Color MOUNTAIN_RES = MOUNTAIN.darker();
+    private static final Color RIVER = new Color(70, 160, 210);
+    private static final Color WALL_LINE = new Color(90, 90, 96);
+    private static final Color ROAD = new Color(186, 150, 90);
 
     private static final Color TILE_EDGE = new Color(0, 0, 0, 100);
     private static final Color OWNED_EDGE = new Color(255, 220, 90);
@@ -60,10 +68,14 @@ public class MapPanel extends JPanel {
     private static final Color EXHAUSTED_TEXT = new Color(210, 90, 90);
     private static final Color MOVE_FILL = new Color(40, 190, 255, 110);
     private static final Color MOVE_EDGE = new Color(20, 230, 255);
+    private static final Color ATTACK_FILL = new Color(220, 70, 50, 120);
+    private static final Color ATTACK_EDGE = new Color(255, 120, 80);
     private static final Color EXPAND_FILL = new Color(255, 200, 60, 90);
     private static final Color EXPAND_EDGE = new Color(255, 220, 90);
     private static final BasicStroke HIGHLIGHT = new BasicStroke(3.0f);
     private static final Color UNIT_FILL = new Color(70, 120, 220);
+    private static final Color MILITARY_FILL = new Color(70, 140, 90);
+    private static final Color HOSTILE_FILL = new Color(180, 50, 45);
     private static final Color UNIT_SELECTED = Color.WHITE;
 
     private static final BasicStroke THIN = new BasicStroke(1.0f);
@@ -100,15 +112,28 @@ public class MapPanel extends JPanel {
     private int fromRow;
     private double progress;
 
+    private final SeasonOverlay seasonOverlay = new SeasonOverlay();
+    private final DisasterOverlay disasterOverlay = new DisasterOverlay();
+    private Timer weatherTimer;
+
     public MapPanel(Game game) {
         this.game = game;
         setBackground(BG);
         setFocusable(true);
         installMouse();
         installKeys();
+        seasonOverlay.setSeason(game.getSeason());
+        weatherTimer = new Timer(50, e -> {
+            seasonOverlay.tick();
+            if (seasonOverlay.isActive() || disasterOverlay.isPlaying()) {
+                repaint();
+            }
+        });
+        weatherTimer.start();
         addComponentListener(new ComponentAdapter() {
             @Override
             public void componentResized(ComponentEvent e) {
+                seasonOverlay.resize(getWidth(), getHeight());
                 if (!cameraReady && getWidth() > 0 && getHeight() > 0) {
                     centerCameraOnTownHall();
                     cameraReady = true;
@@ -123,7 +148,26 @@ public class MapPanel extends JPanel {
     }
 
     public boolean isAnimating() {
-        return movingUnit != null;
+        return movingUnit != null || disasterOverlay.isPlaying();
+    }
+
+    public void onSeasonChanged() {
+        seasonOverlay.setSeason(game.getSeason());
+        seasonOverlay.resize(getWidth(), getHeight());
+        repaint();
+    }
+
+    public void playDisaster(civ.model.world.DisasterEffect effect, Runnable onDone) {
+        disasterOverlay.play(effect, () -> {
+            if (onDone != null) {
+                onDone.run();
+            }
+            repaint();
+        }, (col, row) -> new double[] {
+                HexGeometry.centerX(col, row, HEX_SIZE),
+                HexGeometry.centerY(col, row, HEX_SIZE)
+        });
+        repaint();
     }
 
     private void centerCameraOnTownHall() {
@@ -259,6 +303,10 @@ public class MapPanel extends JPanel {
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g2.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
 
+        int shakeX = disasterOverlay.getShakeX();
+        int shakeY = disasterOverlay.getShakeY();
+        g2.translate(shakeX, shakeY);
+
         g2.drawImage(mapCache(),
                 (int) Math.round(-cameraX * zoom()),
                 (int) Math.round(-cameraY * zoom()),
@@ -266,8 +314,10 @@ public class MapPanel extends JPanel {
 
         drawMoveHighlights(g2);
         drawExpandHighlights(g2);
+        drawWallPickHighlights(g2);
+        drawAttackHighlights(g2);
         Unit selected = game.getSelected();
-        for (Unit unit : game.getUnits()) {
+        for (Unit unit : visibleUnits()) {
             if (unit != selected) {
                 drawUnit(g2, unit);
             }
@@ -275,6 +325,9 @@ public class MapPanel extends JPanel {
         if (selected != null) {
             drawUnit(g2, selected);
         }
+        disasterOverlay.paint(g2, HEX_SIZE, cameraX, cameraY, zoom());
+        g2.translate(-shakeX, -shakeY);
+        seasonOverlay.paint(g2);
         g2.dispose();
 
         g.drawImage(target, 0, 0, null);
@@ -328,6 +381,7 @@ public class MapPanel extends JPanel {
                         HexGeometry.centerY(col, row, HEX_SIZE) * zoom());
             }
         }
+        drawEdges(g2);
         g2.dispose();
         return image;
     }
@@ -357,6 +411,21 @@ public class MapPanel extends JPanel {
             g2.draw(hexShape);
         }
 
+        if (hex.isBlocked()) {
+            double crack = screenHexSize() * 0.45;
+            g2.setColor(new Color(60, 40, 30, 160));
+            g2.setStroke(new BasicStroke(2.0f));
+            g2.drawLine((int) (cx - crack), (int) cy, (int) (cx + crack), (int) (cy + crack / 2));
+            g2.drawLine((int) cx, (int) (cy - crack), (int) (cx + crack / 2), (int) (cy + crack));
+        }
+
+        Building building = hex.getBuilding();
+        if (building instanceof TownHall && ((TownHall) building).hasDefensiveWall()) {
+            g2.setColor(new Color(110, 110, 118));
+            g2.setStroke(new BasicStroke(5.0f));
+            g2.draw(hexShape);
+        }
+
         drawHexContents(g2, hex, cx, cy);
     }
 
@@ -365,8 +434,14 @@ public class MapPanel extends JPanel {
         if (hex.getTerrain() == Terrain.FOREST) {
             return res ? FOREST_RES : FOREST;
         }
+        if (hex.getTerrain() == Terrain.MOUNTAIN_RANGE) {
+            return MOUNTAIN_RANGE;
+        }
         if (hex.getTerrain() == Terrain.MOUNTAIN) {
             return res ? MOUNTAIN_RES : MOUNTAIN;
+        }
+        if (hex.getTerrain() == Terrain.SEA) {
+            return res ? SEA_FISH : SEA;
         }
         if (hex.getTerrain() == Terrain.GRASSLAND) {
             return res ? GRASSLAND_RES : GRASSLAND;
@@ -374,10 +449,57 @@ public class MapPanel extends JPanel {
         return res ? PLAINS_RES : PLAINS;
     }
 
+    private void drawEdges(Graphics2D g2) {
+        for (Edge edge : game.getMap().getEdges().all()) {
+            if (!edge.hasRiver() && !edge.hasWall()) {
+                continue;
+            }
+            Hex a = game.getMap().get(edge.getCol1(), edge.getRow1());
+            Hex b = game.getMap().get(edge.getCol2(), edge.getRow2());
+            if (a == null || b == null) {
+                continue;
+            }
+            if (!a.isDiscovered() && !b.isDiscovered()) {
+                continue;
+            }
+            double x1 = HexGeometry.centerX(a.getCol(), a.getRow(), HEX_SIZE) * zoom();
+            double y1 = HexGeometry.centerY(a.getCol(), a.getRow(), HEX_SIZE) * zoom();
+            double x2 = HexGeometry.centerX(b.getCol(), b.getRow(), HEX_SIZE) * zoom();
+            double y2 = HexGeometry.centerY(b.getCol(), b.getRow(), HEX_SIZE) * zoom();
+            double mx = (x1 + x2) / 2.0;
+            double my = (y1 + y2) / 2.0;
+            double dx = x2 - x1;
+            double dy = y2 - y1;
+            double len = Math.hypot(dx, dy);
+            if (len < 1) {
+                continue;
+            }
+            double half = screenHexSize() * 0.48;
+            double px = -dy / len * half;
+            double py = dx / len * half;
+            int ax = (int) Math.round(mx - px);
+            int ay = (int) Math.round(my - py);
+            int bx = (int) Math.round(mx + px);
+            int by = (int) Math.round(my + py);
+            if (edge.hasRiver()) {
+                g2.setColor(RIVER);
+                g2.setStroke(new BasicStroke(Math.max(3f, (float) (4.5 * zoom())),
+                        BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                g2.drawLine(ax, ay, bx, by);
+            }
+            if (edge.hasWall()) {
+                g2.setColor(WALL_LINE);
+                g2.setStroke(new BasicStroke(Math.max(4f, (float) (6 * zoom())),
+                        BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER));
+                g2.drawLine(ax, ay, bx, by);
+            }
+        }
+    }
+
     private void drawHexContents(Graphics2D g2, Hex hex, double cx, double cy) {
         if (hex.hasResource()) {
             g2.setColor(Color.WHITE);
-            String letter = hex.getDeposit().getLabel().substring(0, 1);
+            String letter = hex.getTerrain().isSea() ? "Fi" : hex.getDeposit().getLabel().substring(0, 1);
             g2.drawString(letter + " " + hex.getDepositAmount(),
                     (int) (cx - 12 * zoom()), (int) (cy - 4 * zoom()));
         } else if (hex.isExhausted()) {
@@ -385,13 +507,31 @@ public class MapPanel extends JPanel {
             g2.drawString("empty", (int) (cx - 16 * zoom()), (int) (cy - 4 * zoom()));
         }
 
+        if (hex.hasRoad()) {
+            g2.setColor(ROAD);
+            g2.setStroke(new BasicStroke(Math.max(2f, (float) (3.5 * zoom()))));
+            int r = Math.max(4, (int) (8 * zoom()));
+            g2.drawLine((int) (cx - r), (int) cy, (int) (cx + r), (int) cy);
+            g2.drawLine((int) cx, (int) (cy - r), (int) cx, (int) (cy + r));
+        }
+
         Building building = hex.getBuilding();
         if (building == null) {
             return;
         }
+        if (building.getType() == BuildingType.TRIBE_CAMP) {
+            civ.model.tribe.Tribe tribe = game.tribeAt(hex);
+            if (tribe == null || !tribe.isDiscovered()) {
+                return;
+            }
+        }
         int size = Math.max(10, (int) (16 * zoom()));
         g2.setColor(building.getType() == BuildingType.TOWN_HALL
                 ? MARKER_FILL
+                : building.getType() == BuildingType.TRIBE_CAMP
+                ? new Color(180, 90, 70)
+                : building.getType() == BuildingType.TRADING_POST
+                ? new Color(200, 180, 90)
                 : new Color(200, 160, 100));
         g2.fillRect((int) (cx - size / 2.0), (int) (cy - size / 2.0), size, size);
         g2.setColor(Color.BLACK);
@@ -405,6 +545,89 @@ public class MapPanel extends JPanel {
         }
     }
 
+    private void drawWallPickHighlights(Graphics2D g2) {
+        if (controller == null || game.getSelected() == null) {
+            return;
+        }
+        if (!controller.isPlacingWall() && !controller.isDemolishingWall()) {
+            return;
+        }
+        Unit selected = game.getSelected();
+        if (!(selected instanceof Builder)) {
+            return;
+        }
+        Builder builder = (Builder) selected;
+        Hex here = game.hexOf(builder);
+        if (here == null) {
+            return;
+        }
+        for (Hex neighbour : game.getMap().neighbours(here)) {
+            boolean ok = controller.isPlacingWall()
+                    ? game.canBuildWall(builder, neighbour)
+                    : game.canDemolishWall(builder, neighbour);
+            if (ok) {
+                paintHighlight(g2, neighbour, EXPAND_FILL, EXPAND_EDGE);
+            }
+        }
+    }
+
+    private void drawAttackHighlights(Graphics2D g2) {
+        if (controller == null || movingUnit != null || game.getSelected() == null) {
+            return;
+        }
+        Unit selected = game.getSelected();
+        if (!(selected instanceof MilitaryUnit)) {
+            return;
+        }
+        Hex from = game.hexOf(selected);
+        if (from == null) {
+            return;
+        }
+        if (controller.isAttackingWall()) {
+            for (Hex neighbour : game.getMap().neighbours(from)) {
+                if (game.canAttackWall(from, neighbour)) {
+                    paintHighlight(g2, neighbour, ATTACK_FILL, ATTACK_EDGE);
+                }
+            }
+            return;
+        }
+        if (!controller.isAttacking()) {
+            return;
+        }
+        int cols = game.getMap().getCols();
+        int rows = game.getMap().getRows();
+        for (int col = 0; col < cols; col++) {
+            for (int row = 0; row < rows; row++) {
+                Hex hex = game.getMap().get(col, row);
+                if (game.canAttack(from, hex)) {
+                    paintHighlight(g2, hex, ATTACK_FILL, ATTACK_EDGE);
+                }
+            }
+        }
+    }
+
+    private List<Unit> visibleUnits() {
+        List<Unit> units = new ArrayList<>(game.getUnits());
+        for (MilitaryUnit hostile : game.getHostiles()) {
+            Hex tile = game.hexOf(hostile);
+            if (tile != null && tile.isDiscovered()) {
+                units.add(hostile);
+            }
+        }
+        for (civ.model.tribe.Tribe tribe : game.getTribes()) {
+            if (!tribe.isDiscovered() || tribe.isDestroyed()) {
+                continue;
+            }
+            for (civ.model.tribe.TribeGuard guard : tribe.getGuards()) {
+                Hex tile = game.hexOf(guard);
+                if (tile != null && tile.isDiscovered()) {
+                    units.add(guard);
+                }
+            }
+        }
+        return units;
+    }
+
     private double screenX(int col, int row) {
         return (HexGeometry.centerX(col, row, HEX_SIZE) - cameraX) * zoom();
     }
@@ -416,6 +639,9 @@ public class MapPanel extends JPanel {
     private void drawMoveHighlights(Graphics2D g2) {
         Unit selected = game.getSelected();
         if (selected == null || movingUnit != null) {
+            return;
+        }
+        if (controller != null && (controller.isAttacking() || controller.isAttackingWall())) {
             return;
         }
         if (selected instanceof BorderExpander) {
@@ -478,7 +704,7 @@ public class MapPanel extends JPanel {
             cy = sy + (cy - sy) * progress;
         } else {
             int stackIndex = 0;
-            for (Unit other : game.getUnits()) {
+            for (Unit other : visibleUnits()) {
                 if (other.getCol() == unit.getCol() && other.getRow() == unit.getRow()) {
                     if (other == unit) {
                         break;
@@ -492,11 +718,28 @@ public class MapPanel extends JPanel {
 
         int radius = Math.max(8, (int) (12 * zoom()));
         boolean selected = unit == game.getSelected();
-        g2.setColor(selected ? UNIT_SELECTED : UNIT_FILL);
-        g2.fillOval((int) (cx - radius), (int) (cy - radius + 6), radius * 2, radius * 2);
-        g2.setColor(Color.BLACK);
-        g2.setStroke(THIN);
-        g2.drawOval((int) (cx - radius), (int) (cy - radius + 6), radius * 2, radius * 2);
+        Hex tile = game.hexOf(unit);
+        boolean boat = tile != null && tile.getTerrain().isSea();
+        Color fill = UNIT_FILL;
+        if (unit instanceof MilitaryUnit && ((MilitaryUnit) unit).isHostile()) {
+            fill = HOSTILE_FILL;
+        } else if (unit instanceof MilitaryUnit) {
+            fill = MILITARY_FILL;
+        }
+        g2.setColor(selected ? UNIT_SELECTED : (boat ? new Color(150, 110, 70) : fill));
+        if (boat) {
+            g2.fillRoundRect((int) (cx - radius), (int) (cy - radius / 2.0 + 6),
+                    radius * 2, radius, radius / 2, radius / 2);
+            g2.setColor(Color.BLACK);
+            g2.setStroke(THIN);
+            g2.drawRoundRect((int) (cx - radius), (int) (cy - radius / 2.0 + 6),
+                    radius * 2, radius, radius / 2, radius / 2);
+        } else {
+            g2.fillOval((int) (cx - radius), (int) (cy - radius + 6), radius * 2, radius * 2);
+            g2.setColor(Color.BLACK);
+            g2.setStroke(THIN);
+            g2.drawOval((int) (cx - radius), (int) (cy - radius + 6), radius * 2, radius * 2);
+        }
 
         g2.setColor(selected ? Color.BLACK : Color.WHITE);
         int fontSize = Math.max(10, (int) (11 * zoom()));

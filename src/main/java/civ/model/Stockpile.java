@@ -3,7 +3,6 @@ package civ.model;
 import java.util.EnumMap;
 import java.util.Map;
 
-/** The warehouse: four resource piles and one shared capacity. */
 public class Stockpile {
 
     private final Map<ResourceType, Integer> amounts = new EnumMap<>(ResourceType.class);
@@ -40,6 +39,10 @@ public class Stockpile {
             now = capacity;
         }
         amounts.put(type, now);
+    }
+
+    public void set(ResourceType type, int amount) {
+        amounts.put(type, amount);
     }
 
     public boolean canPay(ResourceType type, int amount) {

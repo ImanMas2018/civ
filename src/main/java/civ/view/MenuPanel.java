@@ -18,9 +18,6 @@ import java.awt.Font;
 import java.awt.GridBagLayout;
 import java.awt.event.KeyEvent;
 
-/**
- * Main menu: Start, Settings (music volume), Exit (with confirmation).
- */
 public class MenuPanel extends JPanel {
 
     public MenuPanel(MainWindow window) {
@@ -37,16 +34,20 @@ public class MenuPanel extends JPanel {
         title.setAlignmentX(Component.CENTER_ALIGNMENT);
 
         JButton start = makeButton("Start");
+        JButton load = makeButton("Load");
         JButton settings = makeButton("Settings");
         JButton exit = makeButton("Exit");
 
         start.addActionListener(e -> window.startNewGame());
+        load.addActionListener(e -> window.showLoadMenu());
         settings.addActionListener(e -> showSettings(window));
         exit.addActionListener(e -> confirmExit());
 
         column.add(title);
         column.add(Box.createVerticalStrut(40));
         column.add(start);
+        column.add(Box.createVerticalStrut(12));
+        column.add(load);
         column.add(Box.createVerticalStrut(12));
         column.add(settings);
         column.add(Box.createVerticalStrut(12));

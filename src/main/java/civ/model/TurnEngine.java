@@ -1,12 +1,9 @@
 package civ.model;
 
+import civ.model.event.GameEvent;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * The complete End Turn sequence, in the order the specification lists:
- * produce → advance queue → pay upkeep → eat food → check starvation → next turn → refresh AP.
- */
 public class TurnEngine {
 
     public void endTurn(Game game) {
@@ -20,6 +17,12 @@ public class TurnEngine {
 
         game.nextTurn();
         refreshUnits(game, empire);
+        game.getTradeTracker().clearTurn();
+        game.runTribeTurns();
+
+        // Future systems (seasons, disasters, autosave) subscribe here.
+        // Do not call them from this class — that would invert the dependency.
+        game.getBus().publish(GameEvent.TURN_ENDED, game);
     }
 
     private void produceResources(Game game, Empire empire) {
@@ -32,30 +35,52 @@ public class TurnEngine {
                 continue;
             }
 
-            int amount = building.outputPerTurn(empire);
+            int raw = building.outputPerTurn(empire, game.getMap());
+            int amount = game.adjustProduction(building, raw);
             if (amount <= 0) {
                 continue;
             }
 
-            building.getHex().takeResource(amount);
+            if (building.getType() == BuildingType.DOCK) {
+                Adjacency.takeFish(building.getHex(), game.getMap(), amount);
+                if (Adjacency.availableFish(building.getHex(), game.getMap()) <= 0
+                        && building instanceof ProductionBuilding) {
+                    ((ProductionBuilding) building).releaseAllWorkers();
+                    game.addLog("The Dock has no more fish nearby.");
+                }
+            } else {
+                int extracted = Math.min(
+                        building.getHex().getDepositAmount(),
+                        Math.max(0, raw - Adjacency.extraOutput(building, game.getMap())));
+                if (extracted > 0) {
+                    building.getHex().takeResource(extracted);
+                }
+            }
             empire.getStock().add(output, amount);
 
-            if (building.getHex().isExhausted() && building instanceof ProductionBuilding) {
+            if (building.getHex().isExhausted() && building instanceof ProductionBuilding
+                    && building.getType() != BuildingType.DOCK) {
                 ((ProductionBuilding) building).releaseAllWorkers();
                 game.addLog("The " + building.getType().getLabel() + " ran out of resources.");
             }
         }
+
+        int farmBonus = Adjacency.farmPairs(empire, game.getMap());
+        if (farmBonus > 0) {
+            empire.getStock().add(ResourceType.FOOD, farmBonus);
+        }
+        int allyFood = Adjacency.allyFarmBonus(empire, game.getTribes());
+        if (allyFood > 0) {
+            empire.getStock().add(ResourceType.FOOD, allyFood);
+        }
+        int allyStone = Adjacency.allyMineBonus(empire, game.getTribes());
+        if (allyStone > 0) {
+            empire.getStock().add(ResourceType.STONE, allyStone);
+        }
     }
 
     private void advanceTownHallQueue(Game game, Empire empire) {
-        TownHall townHall = empire.getTownHall();
-        ProductionOrder order = townHall.getOrder();
-        if (order == null) {
-            return;
-        }
-        if (order.tick()) {
-            townHall.clearOrder();
-        }
+        empire.getTownHall().tick(game);
     }
 
     private void payUpkeep(Game game, Empire empire) {
@@ -106,8 +131,12 @@ public class TurnEngine {
 
     private void refreshUnits(Game game, Empire empire) {
         int penalty = game.isStarving() ? 1 : 0;
+        penalty += empire.getHappiness().apPenalty();
         for (Unit unit : empire.getUnits()) {
             unit.refresh(penalty);
+        }
+        for (MilitaryUnit hostile : game.getHostiles()) {
+            hostile.refresh(0);
         }
     }
 }

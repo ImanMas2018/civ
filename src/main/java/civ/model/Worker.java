@@ -1,6 +1,5 @@
 package civ.model;
 
-/** Gathers from a building once stationed inside it. */
 public class Worker extends Unit {
 
     private ProductionBuilding station;

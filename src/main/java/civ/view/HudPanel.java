@@ -3,8 +3,9 @@ package civ.view;
 import civ.controller.GameController;
 import civ.model.Empire;
 import civ.model.Game;
-import civ.model.ProductionOrder;
 import civ.model.ResourceType;
+import civ.model.TownHall;
+import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -15,7 +16,6 @@ import java.awt.Font;
 import java.util.List;
 import java.util.Map;
 
-/** Permanent top bar: turn, resources, unit cap, queue, starvation, End Turn. */
 public class HudPanel extends JPanel {
 
     private static final Color BG = new Color(24, 28, 36);
@@ -28,6 +28,7 @@ public class HudPanel extends JPanel {
     private final JLabel turnLabel = new JLabel();
     private final JLabel unitsLabel = new JLabel();
     private final JLabel queueLabel = new JLabel();
+    private final JLabel townHallLabel = new JLabel();
     private final JLabel warningLabel = new JLabel();
     private final JLabel logLabel = new JLabel();
     private final JPanel resourcePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 14, 4));
@@ -40,7 +41,7 @@ public class HudPanel extends JPanel {
         setLayout(new BorderLayout(8, 0));
         setBackground(BG);
 
-        for (JLabel label : new JLabel[] {turnLabel, unitsLabel, queueLabel, warningLabel, logLabel}) {
+        for (JLabel label : new JLabel[] {turnLabel, unitsLabel, queueLabel, townHallLabel, warningLabel, logLabel}) {
             label.setForeground(TEXT);
             label.setFont(new Font("SansSerif", Font.PLAIN, 13));
         }
@@ -58,26 +59,36 @@ public class HudPanel extends JPanel {
             }
         });
 
-        JPanel stats = new JPanel(new FlowLayout(FlowLayout.LEFT, 16, 6));
-        stats.setOpaque(false);
-        stats.add(turnLabel);
-        stats.add(resourcePanel);
-        stats.add(unitsLabel);
-        stats.add(queueLabel);
-        stats.add(warningLabel);
+        JPanel row1 = new JPanel(new FlowLayout(FlowLayout.LEFT, 16, 4));
+        row1.setOpaque(false);
+        row1.add(turnLabel);
+        row1.add(resourcePanel);
+        row1.add(unitsLabel);
+
+        JPanel row2 = new JPanel(new FlowLayout(FlowLayout.LEFT, 16, 4));
+        row2.setOpaque(false);
+        row2.add(townHallLabel);
+        row2.add(queueLabel);
+        row2.add(warningLabel);
+
+        JPanel logBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 16, 2));
+        logBar.setOpaque(false);
+        logBar.add(logLabel);
+
+        JPanel left = new JPanel();
+        left.setOpaque(false);
+        left.setLayout(new BoxLayout(left, BoxLayout.Y_AXIS));
+        left.add(row1);
+        left.add(row2);
+        left.add(logBar);
 
         JPanel buttonBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 6));
         buttonBar.setOpaque(false);
         buttonBar.add(backButton);
         buttonBar.add(endTurnButton);
 
-        JPanel logBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 16, 4));
-        logBar.setOpaque(false);
-        logBar.add(logLabel);
-
-        add(stats, BorderLayout.CENTER);
+        add(left, BorderLayout.CENTER);
         add(buttonBar, BorderLayout.EAST);
-        add(logBar, BorderLayout.SOUTH);
     }
 
     public void setController(GameController controller) {
@@ -90,9 +101,10 @@ public class HudPanel extends JPanel {
 
     public void refresh() {
         Empire empire = game.getEmpire();
-        Map<ResourceType, Integer> rate = empire.netRatePerTurn();
+        Map<ResourceType, Integer> rate = empire.netRatePerTurn(game.getMap(), game.getTribes());
 
-        turnLabel.setText("Turn " + game.getTurn());
+        turnLabel.setText("Turn " + game.getTurn()
+                + "  " + game.getSeason().getLabel());
 
         resourcePanel.removeAll();
         for (ResourceType type : ResourceType.values()) {
@@ -107,15 +119,22 @@ public class HudPanel extends JPanel {
         }
 
         unitsLabel.setText("Units " + empire.getUnits().size() + "/" + empire.getUnitCap()
+                + "  Army " + empire.countMilitary() + "/" + empire.getMilitaryCap()
                 + "  (E" + empire.countUnits("Explorer")
                 + " B" + empire.countUnits("Builder")
                 + " W" + empire.countUnits("Worker")
-                + " X" + empire.countUnits("Border Expander") + ")");
+                + " X" + empire.countUnits("Border Expander")
+                + " S" + empire.countUnits("Swordsman")
+                + " A" + empire.countUnits("Archer")
+                + " C" + empire.countUnits("Cavalry") + ")");
 
-        ProductionOrder order = empire.getTownHall().getOrder();
-        queueLabel.setText(order == null
-                ? "Town Hall: idle"
-                : order.getLabel() + " — " + order.getTurnsLeft() + " turns left");
+        TownHall townHall = empire.getTownHall();
+        townHallLabel.setText(townHall.describeLevel()
+                + "  HP " + townHall.getHp() + "/" + townHall.getMaxHp()
+                + "  Happy " + empire.happiness()
+                + " (" + empire.getHappiness().getLevelName() + ")");
+
+        queueLabel.setText(townHall.describeQueue());
 
         if (game.isStarving()) {
             warningLabel.setText("STARVATION!");
