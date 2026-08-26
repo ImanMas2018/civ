@@ -7,7 +7,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-/** Falling snow in winter, rain/wind streaks in autumn. */
 public class SeasonOverlay {
 
     private static final class Particle {

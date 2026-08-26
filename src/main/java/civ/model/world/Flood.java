@@ -12,10 +12,6 @@ import civ.model.Unit;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Autumn-only flood near river or coast: −20 body HP, AP wiped, roads/farms gone,
- * other buildings −30 HP and paused until end of next turn.
- */
 public class Flood implements Disaster {
 
     @Override

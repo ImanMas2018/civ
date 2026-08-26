@@ -23,7 +23,6 @@ import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Insets;
 
-/** Interaction panel for one discovered tribe camp. */
 public class TribePanel extends JPanel {
 
     private static final Color BG = new Color(32, 36, 46);

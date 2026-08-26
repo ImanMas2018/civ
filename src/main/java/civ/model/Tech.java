@@ -1,8 +1,5 @@
 package civ.model;
 
-/**
- * Town Hall upgrades. Costs and prerequisites live here so balancing is one table.
- */
 public enum Tech {
     STORAGE_1("Storage Upgrade 1", 2, 30, 20, 0, 1, null),
     STORAGE_2("Storage Upgrade 2", 3, 50, 50, 0, 1, STORAGE_1),

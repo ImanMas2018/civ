@@ -1,9 +1,5 @@
 package civ.model;
 
-/**
- * Training table. {@link #create} is a tiny Factory Method: the rest of the
- * program asks for "a unit" and never writes {@code new Worker(...)} itself.
- */
 public enum UnitBlueprint {
 
     WORKER("Worker", 10, 0, 2, false, 1),

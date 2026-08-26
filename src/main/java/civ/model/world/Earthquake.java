@@ -9,9 +9,6 @@ import civ.model.Unit;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Radius-2 quake: units −10 body HP, Town Hall −50 HP (floor 1), cracks block hexes.
- */
 public class Earthquake implements Disaster {
 
     @Override

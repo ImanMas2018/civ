@@ -18,9 +18,6 @@ import java.awt.Font;
 import java.awt.GridBagLayout;
 import java.awt.event.KeyEvent;
 
-/**
- * Main menu: Start, Settings (music volume), Exit (with confirmation).
- */
 public class MenuPanel extends JPanel {
 
     public MenuPanel(MainWindow window) {

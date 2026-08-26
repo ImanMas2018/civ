@@ -9,7 +9,6 @@ import civ.view.MainWindow;
 import java.io.IOException;
 import java.util.List;
 
-/** Save / load glue. Keeps Gson and file I/O out of the view. */
 public class SaveController {
 
     private final SaveService saveService = new SaveService();

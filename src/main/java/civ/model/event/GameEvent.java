@@ -1,6 +1,5 @@
 package civ.model.event;
 
-/** Facts the model publishes. Listeners decide what to do; the publisher does not. */
 public enum GameEvent {
     TURN_STARTED,
     TURN_ENDED,

@@ -1,6 +1,5 @@
 package civ.model;
 
-/** Neutral trading post placed at map setup. Usable once its hex is owned. */
 public class TradingPost extends Building {
 
     public TradingPost(Hex hex) {

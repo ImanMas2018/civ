@@ -1,6 +1,5 @@
 package civ.model.world;
 
-/** Four seasons driven purely by turn number — cannot drift out of sync. */
 public enum Season {
     SPRING("Spring"),
     SUMMER("Summer"),

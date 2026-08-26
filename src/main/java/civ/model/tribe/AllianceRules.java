@@ -2,7 +2,6 @@ package civ.model.tribe;
 
 import java.util.List;
 
-/** Cross-tribe alliance rules that do not belong in a single RelationState. */
 public final class AllianceRules {
 
     private AllianceRules() {

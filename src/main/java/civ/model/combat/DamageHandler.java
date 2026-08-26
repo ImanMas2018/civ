@@ -3,10 +3,6 @@ package civ.model.combat;
 import civ.model.MilitaryUnit;
 import java.util.List;
 
-/**
- * One link in the hit-priority chain. Each subclass answers for one unit type
- * and passes leftover hits to {@code next}.
- */
 public abstract class DamageHandler {
 
     private DamageHandler next;

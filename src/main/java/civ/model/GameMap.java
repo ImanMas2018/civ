@@ -4,7 +4,6 @@ import civ.util.HexGeometry;
 import java.util.ArrayList;
 import java.util.List;
 
-/** The grid of hexes. Uses odd-r offset coordinates stored in a 2-D array. */
 public class GameMap {
 
     private final int cols;

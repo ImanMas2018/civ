@@ -35,10 +35,6 @@ import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Draws the hex map with fog of war, units, zoom and pan.
- * The terrain image is cached; units and move highlights are drawn every frame.
- */
 public class MapPanel extends JPanel {
 
     /** Distance from hex centre to a vertex, in world pixels (before zoom). */

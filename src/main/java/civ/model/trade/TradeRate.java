@@ -1,6 +1,5 @@
 package civ.model.trade;
 
-/** Strategy: how much you get back when selling a resource. */
 public interface TradeRate {
 
     String getLabel();

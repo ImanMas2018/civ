@@ -1,6 +1,5 @@
 package civ.model;
 
-/** Hostile beast. A defending animal hex rolls 1 die. */
 public class WildAnimal extends MilitaryUnit {
 
     public WildAnimal(int col, int row) {

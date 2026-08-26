@@ -1,9 +1,5 @@
 package civ.model.world;
 
-/**
- * Cumulative happiness. Event listeners call {@link #add(int)}; continuous
- * effects (garrison) are folded in by {@link #setGarrisonBonus(int)}.
- */
 public class Happiness {
 
     private int value = 0;

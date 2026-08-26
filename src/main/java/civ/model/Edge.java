@@ -2,10 +2,6 @@ package civ.model;
 
 import java.util.Objects;
 
-/**
- * The border between two neighbouring hexes. Always stored in a canonical order,
- * so the edge A→B and the edge B→A are the same object.
- */
 public class Edge {
 
     private final int col1;

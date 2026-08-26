@@ -6,10 +6,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
-/**
- * Observer hub. Systems subscribe to events; publishers never import those systems.
- * Adding a listener later (seasons, disasters, save) does not edit {@code TurnEngine}.
- */
 public class EventBus {
 
     private final Map<GameEvent, List<Consumer<Object>>> listeners =

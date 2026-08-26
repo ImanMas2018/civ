@@ -1,9 +1,5 @@
 package civ.model;
 
-/**
- * Shared state for every unit: position, action points and vision.
- * Concrete types only change the numbers and add their own extra ability.
- */
 public abstract class Unit {
 
     private static final int DEFAULT_BODY_HP = 50;

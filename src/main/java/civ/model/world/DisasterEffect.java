@@ -5,7 +5,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-/** Snapshot the view animates after a disaster strikes. */
 public class DisasterEffect {
 
     private final String name;

@@ -3,7 +3,6 @@ package civ.model.trade;
 import java.util.HashSet;
 import java.util.Set;
 
-/** One bazaar / trading-post / tribe trade per turn. */
 public class TradeTracker {
 
     private final Set<String> used = new HashSet<>();

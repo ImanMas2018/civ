@@ -1,6 +1,5 @@
 package civ.model;
 
-/** Disaster bear. Never damages buildings; fights with the normal dice system. */
 public class Bear extends MilitaryUnit {
 
     public Bear(int col, int row) {

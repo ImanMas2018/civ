@@ -1,9 +1,5 @@
 package civ.model;
 
-/**
- * Neighbour bonuses, recomputed from scratch whenever asked.
- * Cheap, and it cannot drift out of sync with the map.
- */
 public final class Adjacency {
 
     private Adjacency() {

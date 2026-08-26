@@ -6,7 +6,6 @@ import civ.model.Empire;
 import civ.model.GameMap;
 import civ.model.Hex;
 
-/** Neutral camp building. Not owned by the empire until conquered as an Outpost. */
 public class TribeCamp extends Building {
 
     private final Tribe tribe;

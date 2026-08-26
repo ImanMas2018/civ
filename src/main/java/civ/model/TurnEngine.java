@@ -4,10 +4,6 @@ import civ.model.event.GameEvent;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * The complete End Turn sequence, in the order the specification lists:
- * produce → advance queue → pay upkeep → eat food → check starvation → next turn → refresh AP.
- */
 public class TurnEngine {
 
     public void endTurn(Game game) {

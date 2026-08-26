@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-/** Outcome of one dice fight. The view animates this; the model applies the hits. */
 public class BattleReport {
 
     public static final class Pair {

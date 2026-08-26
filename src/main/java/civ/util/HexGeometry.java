@@ -2,12 +2,6 @@ package civ.util;
 
 import java.awt.geom.Path2D;
 
-/**
- * All hex-grid maths in one place (odd-r offset coordinates, pointy-top hexes).
- * Static toolbox — do not create instances.
- *
- * {@code size} is always the distance from the hex centre to a vertex (the outer radius).
- */
 public final class HexGeometry {
 
     private HexGeometry() {

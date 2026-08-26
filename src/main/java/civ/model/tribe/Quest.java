@@ -12,7 +12,6 @@ import java.util.HashSet;
 import java.util.Queue;
 import java.util.Set;
 
-/** One short-term goal offered by a tribe. */
 public class Quest {
 
     private final String title;

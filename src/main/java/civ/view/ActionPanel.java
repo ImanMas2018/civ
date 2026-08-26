@@ -27,10 +27,6 @@ import java.awt.Font;
 import java.awt.Insets;
 import java.awt.Rectangle;
 
-/**
- * Side panel for the selected unit. Illegal actions are greyed out with a tooltip
- * that says why — the player never clicks something that then fails.
- */
 public class ActionPanel extends JPanel implements Scrollable {
 
     private static final int PANEL_WIDTH = 280;

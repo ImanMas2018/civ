@@ -1,9 +1,5 @@
 package civ.model;
 
-/**
- * Shared combat stats. Disaster / body HP (later) is a different number —
- * dice fights only use {@link #getCombatHp()}.
- */
 public abstract class MilitaryUnit extends Unit {
 
     private final int maxCombatHp;

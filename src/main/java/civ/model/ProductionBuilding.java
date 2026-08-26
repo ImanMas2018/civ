@@ -3,7 +3,6 @@ package civ.model;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Mill, mine, farm, stable, settlement — output scales with stationed workers. */
 public class ProductionBuilding extends Building {
 
     private final List<Worker> workers = new ArrayList<>();

@@ -33,10 +33,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-/**
- * Game state plus the rules the view and controller are allowed to ask.
- * End Turn itself lives in {@link TurnEngine}.
- */
 public class Game {
 
     private final GameMap map;
@@ -201,10 +197,10 @@ public class Game {
         placeTradingPost();
         tribes.addAll(new TribePlacer(random).place(map, centreCol, centreRow));
 
-        empire.getStock().add(ResourceType.FOOD, 999);
-        empire.getStock().add(ResourceType.WOOD, 999);
-        empire.getStock().add(ResourceType.STONE, 999);
-        empire.getStock().add(ResourceType.IRON, 999);
+        empire.getStock().add(ResourceType.FOOD, 80);
+        empire.getStock().add(ResourceType.WOOD, 60);
+        empire.getStock().add(ResourceType.STONE, 30);
+        empire.getStock().add(ResourceType.IRON, 10);
     }
 
     public void addUnit(Unit unit) {

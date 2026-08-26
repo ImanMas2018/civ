@@ -20,10 +20,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-/**
- * Shows both sides' dice rolling, then the pairing and who won each pair.
- * The model has already decided the numbers; this only replays them.
- */
 public final class BattlePanel {
 
     private static final Color BG = new Color(28, 32, 42);

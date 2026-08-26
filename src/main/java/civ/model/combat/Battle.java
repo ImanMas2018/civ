@@ -4,10 +4,6 @@ import civ.model.MilitaryUnit;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Dice fight between two hexes. Structure damage is a separate method —
- * walls and buildings never roll.
- */
 public class Battle {
 
     private final Dice dice;

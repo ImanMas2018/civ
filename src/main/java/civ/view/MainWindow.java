@@ -12,9 +12,6 @@ import java.awt.CardLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 
-/**
- * Top-level window. Uses CardLayout to switch between menu and game screens.
- */
 public class MainWindow extends JFrame {
 
     private final CardLayout cards = new CardLayout();

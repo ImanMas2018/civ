@@ -5,10 +5,6 @@ import civ.model.ResourceType;
 import civ.model.Unit;
 import civ.model.UnitBlueprint;
 
-/**
- * One place that checks caps, then constructs a unit. Payment for queued training
- * happens in the Command; {@link #spawn} only builds the object.
- */
 public class UnitFactory {
 
     private final Game game;

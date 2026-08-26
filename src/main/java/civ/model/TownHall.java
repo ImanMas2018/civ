@@ -2,11 +2,6 @@ package civ.model;
 
 import civ.model.command.Command;
 
-/**
- * Starting building. The +1 food / +1 wood safeguard is applied in
- * {@link Empire#netRatePerTurn()} and again in {@link TurnEngine}.
- * Only one production command at a time.
- */
 public class TownHall extends Building {
 
     private static final int START_HP = 200;

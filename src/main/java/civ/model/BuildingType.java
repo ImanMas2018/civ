@@ -1,9 +1,5 @@
 package civ.model;
 
-/**
- * Master table for every building. Adding a type in Phase 2 is one new row;
- * existing code does not change (Open/Closed).
- */
 public enum BuildingType {
 
     TOWN_HALL("Town Hall", null, null, null, 0, 0, 0, 0, 0, 0, null, 0, null, 1),

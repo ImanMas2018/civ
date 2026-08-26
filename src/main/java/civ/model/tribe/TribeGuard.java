@@ -2,7 +2,6 @@ package civ.model.tribe;
 
 import civ.model.MilitaryUnit;
 
-/** A tribe guard. Maps onto swordsman combat stats for dice fights. */
 public class TribeGuard extends MilitaryUnit {
 
     private final Tribe tribe;

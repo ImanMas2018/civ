@@ -10,7 +10,6 @@ import java.util.List;
 import java.util.function.BiFunction;
 import javax.swing.Timer;
 
-/** Shake, cracks, rising water or bear flash for a few frames. */
 public class DisasterOverlay {
 
     private DisasterEffect effect;

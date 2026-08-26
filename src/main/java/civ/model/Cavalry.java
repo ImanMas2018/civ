@@ -1,6 +1,5 @@
 package civ.model;
 
-/** Fast melee unit. Needs Town Hall level 2 and a Military Stable. */
 public class Cavalry extends MilitaryUnit {
 
     public Cavalry(int col, int row) {

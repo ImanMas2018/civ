@@ -1,6 +1,5 @@
 package civ.model;
 
-/** Ranged military unit. Unlocked at Town Hall level 2. */
 public class Archer extends MilitaryUnit {
 
     public Archer(int col, int row) {

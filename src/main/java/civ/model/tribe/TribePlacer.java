@@ -9,7 +9,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 
-/** Places one camp of each tribe type far from the Town Hall. */
 public class TribePlacer {
 
     private static final String[] NAMES = {

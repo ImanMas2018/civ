@@ -1,6 +1,5 @@
 package civ.model;
 
-/** Ground type of a hex. Movement cost lives here (property of the terrain). */
 public enum Terrain {
     PLAINS("Plains", 1),
     GRASSLAND("Grassland", 1),

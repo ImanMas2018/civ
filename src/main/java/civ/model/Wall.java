@@ -1,6 +1,5 @@
 package civ.model;
 
-/** A defensive wall sitting on the edge between two hexes. */
 public class Wall {
 
     private int hp = 50;

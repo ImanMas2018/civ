@@ -10,7 +10,6 @@ import civ.model.TradingPost;
 import civ.model.event.EventBus;
 import civ.model.event.GameEvent;
 
-/** One place that knows how to construct every building type. */
 public class BuildingFactory {
 
     private final EventBus bus;

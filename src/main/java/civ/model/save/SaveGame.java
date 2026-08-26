@@ -3,7 +3,6 @@ package civ.model.save;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Flat model snapshot for JSON. No Swing, no controllers, no behaviour. */
 public class SaveGame {
 
     public int saveVersion = 1;

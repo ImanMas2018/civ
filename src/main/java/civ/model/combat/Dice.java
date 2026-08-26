@@ -5,7 +5,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 
-/** Rolls, applies a bonus, sorts high to low. */
 public class Dice {
 
     private final Random random;

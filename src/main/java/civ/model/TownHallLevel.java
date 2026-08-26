@@ -1,8 +1,5 @@
 package civ.model;
 
-/**
- * Town Hall ranks. Costs and storage are the values for <em>reaching</em> that rank.
- */
 public enum TownHallLevel {
     BASE_CAMP(1, "Base Camp", 100, 0, 0, 0, 0, 0),
     SETTLEMENT(2, "Settlement", 200, 50, 50, 0, 3, 50),

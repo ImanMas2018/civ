@@ -18,7 +18,6 @@ import java.awt.Font;
 import java.io.IOException;
 import java.util.List;
 
-/** Pause menu: three manual slots plus autosave. */
 public class SaveLoadPanel extends JPanel {
 
     private static final Color BG = new Color(28, 32, 42);

@@ -24,10 +24,6 @@ import javax.swing.JScrollPane;
 import java.awt.Dimension;
 import java.util.List;
 
-/**
- * Glue between clicks and the model. Every method asks the model to do something,
- * then tells the view to redraw. No game rules live here.
- */
 public class GameController {
 
     private final Game game;

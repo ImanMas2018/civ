@@ -1,6 +1,5 @@
 package civ.model;
 
-/** The four empire resources. A hex deposit is also a ResourceType (or null if empty). */
 public enum ResourceType {
     FOOD("Food"),
     WOOD("Wood"),

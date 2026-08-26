@@ -4,7 +4,6 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
-/** Looks up the unique {@link Edge} between any two neighbouring hexes. */
 public class EdgeMap {
 
     private final Map<Edge, Edge> edges = new HashMap<>();

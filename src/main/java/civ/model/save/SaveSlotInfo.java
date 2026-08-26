@@ -1,6 +1,5 @@
 package civ.model.save;
 
-/** One row in the pause-menu save list. */
 public class SaveSlotInfo {
 
     public enum Kind {

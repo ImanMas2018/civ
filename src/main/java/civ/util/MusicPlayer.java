@@ -7,10 +7,6 @@ import javax.sound.sampled.FloatControl;
 import java.io.BufferedInputStream;
 import java.io.InputStream;
 
-/**
- * Plays a looping background soundtrack and adjusts volume (0..100).
- * Missing or unreadable music files are ignored so the game still runs.
- */
 public class MusicPlayer {
 
     private Clip clip;

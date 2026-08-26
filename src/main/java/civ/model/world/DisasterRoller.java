@@ -7,7 +7,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 
-/** 5% chance per turn; picks among disasters that say they can happen. */
 public class DisasterRoller {
 
     private final List<Disaster> all;

@@ -16,7 +16,6 @@ import java.awt.Font;
 import java.util.List;
 import java.util.Map;
 
-/** Permanent top bar: turn, resources, unit cap, queue, starvation, End Turn. */
 public class HudPanel extends JPanel {
 
     private static final Color BG = new Color(24, 28, 36);

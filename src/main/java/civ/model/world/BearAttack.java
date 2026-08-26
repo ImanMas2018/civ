@@ -7,10 +7,6 @@ import civ.model.Terrain;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Bears emerge from a forest. Prefer civilians, never hit buildings, leave when no
- * target remains within 3 hexes. Cooldown 5 turns; second bear if 3+ military near den.
- */
 public class BearAttack implements Disaster {
 
     @Override

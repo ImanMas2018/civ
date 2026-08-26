@@ -1,6 +1,5 @@
 package civ.model;
 
-/** Shared building state. Subclasses decide how much they produce. */
 public abstract class Building {
 
     private static final int DEFAULT_HP = 40;

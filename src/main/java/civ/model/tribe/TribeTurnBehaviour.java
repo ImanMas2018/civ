@@ -6,10 +6,6 @@ import civ.model.MilitaryUnit;
 import civ.util.HexGeometry;
 import java.util.List;
 
-/**
- * One primary action per tribe per turn, in priority order:
- * defend → spawn guard (enemy) → offer quest (friendly) → idle.
- */
 public class TribeTurnBehaviour {
 
     public void act(Game game, Tribe tribe) {

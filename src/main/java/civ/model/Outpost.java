@@ -1,6 +1,5 @@
 package civ.model;
 
-/** Former tribe camp claimed by the player. */
 public class Outpost extends Building {
 
     public Outpost(Hex hex) {

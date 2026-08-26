@@ -28,7 +28,6 @@ import java.awt.Window;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Lets the player pick sell/receive resources and confirm a trade. */
 public final class TradeDialog {
 
     private TradeDialog() {

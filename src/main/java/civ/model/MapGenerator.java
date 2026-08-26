@@ -7,10 +7,6 @@ import java.util.List;
 import java.util.Queue;
 import java.util.Random;
 
-/**
- * Fills a GameMap with terrain, coasts, mountain ranges and river edges.
- * The starting ring stays open land so the player is never boxed in.
- */
 public class MapGenerator {
 
     private final Random random;

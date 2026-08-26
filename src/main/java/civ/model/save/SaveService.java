@@ -61,7 +61,6 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 
-/** Serialises model state to JSON files under {@code ~/.civ-saves}. */
 public class SaveService {
 
     private static final Path FOLDER = Paths.get(System.getProperty("user.home"), ".civ-saves");

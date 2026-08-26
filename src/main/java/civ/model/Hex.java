@@ -1,6 +1,5 @@
 package civ.model;
 
-/** One tile of the map. Coordinates and terrain never change; fog, ownership and deposit amount do. */
 public class Hex {
 
     private final int col;

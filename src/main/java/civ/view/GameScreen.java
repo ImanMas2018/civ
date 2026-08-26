@@ -10,7 +10,6 @@ import javax.swing.JScrollPane;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 
-/** Puts the HUD, map and action panel together, then wires the controller. */
 public class GameScreen extends JPanel {
 
     private final MainWindow window;

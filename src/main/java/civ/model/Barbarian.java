@@ -1,6 +1,5 @@
 package civ.model;
 
-/** Hostile raider. A defending barbarian hex rolls 2 dice. */
 public class Barbarian extends MilitaryUnit {
 
     public Barbarian(int col, int row) {

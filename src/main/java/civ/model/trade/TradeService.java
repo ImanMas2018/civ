@@ -3,7 +3,6 @@ package civ.model.trade;
 import civ.model.Game;
 import civ.model.ResourceType;
 
-/** The only place that performs a resource exchange. */
 public class TradeService {
 
     public boolean canTrade(Game game, TradeRate rate, ResourceType sell, int amount) {

@@ -1,6 +1,5 @@
 package civ.model;
 
-/** Builds structures. Consumed after three builds (used from Step 4). */
 public class Builder extends Unit {
 
     private int charges;
