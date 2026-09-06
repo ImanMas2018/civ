@@ -407,7 +407,7 @@ public class MapPanel extends JPanel {
 
         civ.model.Player owner = game.ownerOf(hex);
         if (owner != null) {
-            g2.setColor(owner.getColour().getAwt());
+            g2.setColor(diplomacyOutline(owner));
             g2.setStroke(THICK);
             g2.draw(hexShape);
         } else if (hex.isReserved()) {
@@ -742,14 +742,14 @@ public class MapPanel extends JPanel {
         if (boat) {
             g2.fillRoundRect((int) (cx - radius), (int) (cy - radius / 2.0 + 6),
                     radius * 2, radius, radius / 2, radius / 2);
-            g2.setColor(Color.BLACK);
-            g2.setStroke(THIN);
+            g2.setColor(unitOutline(unit));
+            g2.setStroke(selected ? new BasicStroke(3f) : THICK);
             g2.drawRoundRect((int) (cx - radius), (int) (cy - radius / 2.0 + 6),
                     radius * 2, radius, radius / 2, radius / 2);
         } else {
             g2.fillOval((int) (cx - radius), (int) (cy - radius + 6), radius * 2, radius * 2);
-            g2.setColor(Color.BLACK);
-            g2.setStroke(THIN);
+            g2.setColor(unitOutline(unit));
+            g2.setStroke(selected ? new BasicStroke(3f) : THICK);
             g2.drawOval((int) (cx - radius), (int) (cy - radius + 6), radius * 2, radius * 2);
         }
 
@@ -758,5 +758,31 @@ public class MapPanel extends JPanel {
         g2.setFont(new Font("SansSerif", Font.BOLD, fontSize));
         g2.drawString(unit.getLetter() + " " + unit.getAp(),
                 (int) (cx - 8 * zoom()), (int) (cy + 10 * zoom()));
+    }
+
+    private Color diplomacyOutline(civ.model.Player owner) {
+        civ.model.Player me = game.getViewpointPlayer();
+        if (owner.getId() == me.getId()) {
+            return owner.getColour().getAwt();
+        }
+        civ.model.diplomacy.DiplomaticState state = game.getDiplomacy().between(me, owner);
+        if (state == civ.model.diplomacy.DiplomaticState.ENEMY) {
+            return new Color(200, 40, 40);
+        }
+        if (state == civ.model.diplomacy.DiplomaticState.ALLIED) {
+            return new Color(40, 170, 60);
+        }
+        return new Color(200, 200, 60);
+    }
+
+    private Color unitOutline(Unit unit) {
+        if (unit instanceof MilitaryUnit && ((MilitaryUnit) unit).isHostile()) {
+            return Color.BLACK;
+        }
+        civ.model.Player owner = game.getPlayer(unit.getOwnerId());
+        if (owner == null) {
+            return Color.BLACK;
+        }
+        return diplomacyOutline(owner);
     }
 }

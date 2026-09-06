@@ -23,6 +23,8 @@ public class GameStateDto {
     public int yourUnitCap;
     public int yourHappiness;
     public boolean yourStarving;
+    public List<TradeOfferDto> yourInbox = new ArrayList<>();
+    public List<TradeOfferDto> yourOutgoing = new ArrayList<>();
     public List<String> log = new ArrayList<>();
 
     public static class HexDto {
@@ -96,7 +98,27 @@ public class GameStateDto {
         public int wood;
         public int stone;
         public int iron;
+        public int lockedFood;
+        public int lockedWood;
+        public int lockedStone;
+        public int lockedIron;
         public int capacity;
+    }
+
+    public static class TradeOfferDto {
+        public long id;
+        public long fromPlayerId;
+        public long toPlayerId;
+        public String fromPlayerName;
+        public String toPlayerName;
+        public int offerFood;
+        public int offerWood;
+        public int offerStone;
+        public int offerIron;
+        public int askFood;
+        public int askWood;
+        public int askStone;
+        public int askIron;
     }
 
     public static class TribeDto {

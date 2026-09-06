@@ -13,6 +13,7 @@ import civ.model.TownHall;
 import civ.model.Unit;
 import civ.model.Wall;
 import civ.model.Worker;
+import civ.model.trade.TradeOffer;
 import civ.model.tribe.Tribe;
 import civ.model.tribe.TribeCamp;
 import civ.net.protocol.dto.GameStateDto;
@@ -54,6 +55,8 @@ public final class StateFilter {
 
         Set<Hex> known = discoveredBy(game, viewer);
         Set<Hex> visible = currentlyVisible(game, viewer);
+        // Ally vision is temporary: include visible hexes for this snapshot only.
+        known.addAll(visible);
 
         for (Hex hex : known) {
             GameStateDto.HexDto hexDto = new GameStateDto.HexDto();
@@ -169,6 +172,9 @@ public final class StateFilter {
             dto.yourTechs.add(tech.name());
         }
 
+        dto.yourInbox = toTradeDtos(game, game.getTradeOffers().pendingFor(viewer));
+        dto.yourOutgoing = toTradeDtos(game, game.getTradeOffers().pendingFrom(viewer));
+
         dto.players = publicPlayerInfo(game, viewer);
         dto.log = new ArrayList<>(game.getLog());
         return dto;
@@ -196,13 +202,13 @@ public final class StateFilter {
         return known;
     }
 
-    /** Your own vision, plus every ally's vision (alliances land in Step 4). */
+    /** Your own vision, plus every ally's vision — shared sight without mutating Fog. */
     private static Set<Hex> currentlyVisible(Game game, Player viewer) {
         Set<Hex> visible = new HashSet<>();
         for (Player player : game.getPlayers()) {
             boolean self = player.getId() == viewer.getId();
-            // Step 4: boolean ally = game.getDiplomacy().sharesVision(viewer, player);
-            if (!self) {
+            boolean ally = game.getDiplomacy().sharesVision(viewer, player);
+            if (!self && !ally) {
                 continue;
             }
             for (Unit unit : player.getEmpire().getUnits()) {
@@ -275,8 +281,36 @@ public final class StateFilter {
         dto.wood = stock.get(ResourceType.WOOD);
         dto.stone = stock.get(ResourceType.STONE);
         dto.iron = stock.get(ResourceType.IRON);
+        dto.lockedFood = stock.getLocked(ResourceType.FOOD);
+        dto.lockedWood = stock.getLocked(ResourceType.WOOD);
+        dto.lockedStone = stock.getLocked(ResourceType.STONE);
+        dto.lockedIron = stock.getLocked(ResourceType.IRON);
         dto.capacity = stock.getCapacity();
         return dto;
+    }
+
+    private static List<GameStateDto.TradeOfferDto> toTradeDtos(Game game, List<TradeOffer> offers) {
+        List<GameStateDto.TradeOfferDto> list = new ArrayList<>();
+        for (TradeOffer offer : offers) {
+            GameStateDto.TradeOfferDto dto = new GameStateDto.TradeOfferDto();
+            dto.id = offer.getId();
+            dto.fromPlayerId = offer.getFromPlayerId();
+            dto.toPlayerId = offer.getToPlayerId();
+            Player from = game.getPlayer(offer.getFromPlayerId());
+            Player to = game.getPlayer(offer.getToPlayerId());
+            dto.fromPlayerName = from == null ? "?" : from.getName();
+            dto.toPlayerName = to == null ? "?" : to.getName();
+            dto.offerFood = offer.offered(ResourceType.FOOD);
+            dto.offerWood = offer.offered(ResourceType.WOOD);
+            dto.offerStone = offer.offered(ResourceType.STONE);
+            dto.offerIron = offer.offered(ResourceType.IRON);
+            dto.askFood = offer.requested(ResourceType.FOOD);
+            dto.askWood = offer.requested(ResourceType.WOOD);
+            dto.askStone = offer.requested(ResourceType.STONE);
+            dto.askIron = offer.requested(ResourceType.IRON);
+            list.add(dto);
+        }
+        return list;
     }
 
     private static List<GameStateDto.PlayerDto> publicPlayerInfo(Game game, Player viewer) {
@@ -289,7 +323,7 @@ public final class StateFilter {
             dto.colour = player.getColour().name();
             dto.alive = player.isAlive();
             dto.connected = player.isConnected();
-            dto.diplomacyWithYou = player.getId() == viewer.getId() ? "ALLIED" : "NEUTRAL";
+            dto.diplomacyWithYou = game.getDiplomacy().between(viewer, player).name();
             list.add(dto);
         }
         return list;

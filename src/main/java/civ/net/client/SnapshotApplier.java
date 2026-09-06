@@ -93,6 +93,23 @@ public final class SnapshotApplier {
             applyStock(viewer.getEmpire(), dto.yourStock);
         }
 
+        game.getDiplomacy().clear();
+        if (viewer != null) {
+            for (GameStateDto.PlayerDto playerDto : dto.players) {
+                Player other = game.getPlayer(playerDto.id);
+                if (other == null || other.getId() == viewer.getId()) {
+                    continue;
+                }
+                try {
+                    game.getDiplomacy().set(viewer, other,
+                            civ.model.diplomacy.DiplomaticState.valueOf(playerDto.diplomacyWithYou));
+                } catch (RuntimeException ignored) {
+                }
+            }
+        }
+
+        applyTradeOffers(game, dto);
+
         // Fog + hex cosmetics for the viewer
         if (viewer != null) {
             for (int col = 0; col < game.getMap().getCols(); col++) {
@@ -300,6 +317,44 @@ public final class SnapshotApplier {
         empire.getStock().set(ResourceType.WOOD, stock.wood);
         empire.getStock().set(ResourceType.STONE, stock.stone);
         empire.getStock().set(ResourceType.IRON, stock.iron);
+        empire.getStock().setLocked(ResourceType.FOOD, stock.lockedFood);
+        empire.getStock().setLocked(ResourceType.WOOD, stock.lockedWood);
+        empire.getStock().setLocked(ResourceType.STONE, stock.lockedStone);
+        empire.getStock().setLocked(ResourceType.IRON, stock.lockedIron);
+    }
+
+    private static void applyTradeOffers(Game game, GameStateDto dto) {
+        // Client only keeps pending offers visible to this player for UI.
+        // Clear by cancelling status is awkward — rebuild via reflection of ids isn't needed:
+        // we store inbox DTOs on a side list? Simpler: clear tradeOffers list via cancel-all
+        // isn't available. Add a clear method.
+        game.getTradeOffers().clear();
+        if (dto.yourInbox != null) {
+            for (GameStateDto.TradeOfferDto offerDto : dto.yourInbox) {
+                game.getTradeOffers().add(fromDto(offerDto));
+            }
+        }
+        if (dto.yourOutgoing != null) {
+            for (GameStateDto.TradeOfferDto offerDto : dto.yourOutgoing) {
+                if (game.getTradeOffers().byId(offerDto.id) == null) {
+                    game.getTradeOffers().add(fromDto(offerDto));
+                }
+            }
+        }
+    }
+
+    private static civ.model.trade.TradeOffer fromDto(GameStateDto.TradeOfferDto dto) {
+        civ.model.trade.TradeOffer offer = new civ.model.trade.TradeOffer(
+                dto.id, 0L, dto.fromPlayerId, dto.toPlayerId);
+        offer.getOffered().put(ResourceType.FOOD, dto.offerFood);
+        offer.getOffered().put(ResourceType.WOOD, dto.offerWood);
+        offer.getOffered().put(ResourceType.STONE, dto.offerStone);
+        offer.getOffered().put(ResourceType.IRON, dto.offerIron);
+        offer.getRequested().put(ResourceType.FOOD, dto.askFood);
+        offer.getRequested().put(ResourceType.WOOD, dto.askWood);
+        offer.getRequested().put(ResourceType.STONE, dto.askStone);
+        offer.getRequested().put(ResourceType.IRON, dto.askIron);
+        return offer;
     }
 
     private static Building createBuilding(Game game, GameStateDto.BuildingDto dto) {

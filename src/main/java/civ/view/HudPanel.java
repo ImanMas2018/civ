@@ -116,12 +116,20 @@ public class HudPanel extends JPanel {
         resourcePanel.removeAll();
         for (ResourceType type : ResourceType.values()) {
             int amount = empire.getStock().get(type);
+            int locked = empire.getStock().getLocked(type);
             int perTurn = rate.get(type);
-            JLabel label = new JLabel(type.getLabel() + " " + amount + "/"
-                    + empire.getStock().getCapacity()
-                    + "  (" + (perTurn >= 0 ? "+" : "") + perTurn + ")");
+            String text = type.getLabel() + " " + amount + "/"
+                    + empire.getStock().getCapacity();
+            if (locked > 0) {
+                text += " (" + locked + " locked)";
+            }
+            text += "  (" + (perTurn >= 0 ? "+" : "") + perTurn + ")";
+            JLabel label = new JLabel(text);
             label.setFont(new Font("SansSerif", Font.PLAIN, 13));
             label.setForeground(perTurn < 0 ? NEGATIVE : TEXT);
+            if (locked > 0) {
+                label.setToolTipText(locked + " reserved for pending trade offers.");
+            }
             resourcePanel.add(label);
         }
 

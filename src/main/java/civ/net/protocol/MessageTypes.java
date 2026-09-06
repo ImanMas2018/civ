@@ -1,5 +1,6 @@
 package civ.net.protocol;
 
+import civ.net.protocol.push.AlliancePrompt;
 import civ.net.protocol.push.BattleReportPush;
 import civ.net.protocol.push.ChatBroadcast;
 import civ.net.protocol.push.GameOverBroadcast;
@@ -9,10 +10,12 @@ import civ.net.protocol.push.NoticePush;
 import civ.net.protocol.request.AllianceReplyRequest;
 import civ.net.protocol.request.AllianceRequest;
 import civ.net.protocol.request.AttackRequest;
+import civ.net.protocol.request.BreakAllianceRequest;
 import civ.net.protocol.request.BuildRequest;
 import civ.net.protocol.request.BuildRoadRequest;
 import civ.net.protocol.request.BuildWallRequest;
 import civ.net.protocol.request.CancelTownHallOrderRequest;
+import civ.net.protocol.request.CancelTradeRequest;
 import civ.net.protocol.request.ChatRequest;
 import civ.net.protocol.request.CheatRequest;
 import civ.net.protocol.request.CraftItemRequest;
@@ -70,8 +73,10 @@ public final class MessageTypes {
         register(DeclareWarRequest.TYPE, DeclareWarRequest.class);
         register(AllianceRequest.TYPE, AllianceRequest.class);
         register(AllianceReplyRequest.TYPE, AllianceReplyRequest.class);
+        register(BreakAllianceRequest.TYPE, BreakAllianceRequest.class);
         register(TradeOfferRequest.TYPE, TradeOfferRequest.class);
         register(TradeReplyRequest.TYPE, TradeReplyRequest.class);
+        register(CancelTradeRequest.TYPE, CancelTradeRequest.class);
         register(CraftItemRequest.TYPE, CraftItemRequest.class);
         register(UseItemRequest.TYPE, UseItemRequest.class);
         register(CheatRequest.TYPE, CheatRequest.class);
@@ -82,6 +87,7 @@ public final class MessageTypes {
         register(GameStateBroadcast.TYPE, GameStateBroadcast.class);
         register(ChatBroadcast.TYPE, ChatBroadcast.class);
         register(NoticePush.TYPE, NoticePush.class);
+        register(AlliancePrompt.TYPE, AlliancePrompt.class);
         register(BattleReportPush.TYPE, BattleReportPush.class);
         register(GameOverBroadcast.TYPE, GameOverBroadcast.class);
     }

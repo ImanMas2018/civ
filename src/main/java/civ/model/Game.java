@@ -11,10 +11,12 @@ import civ.model.combat.DamageHandler;
 import civ.model.combat.Dice;
 import civ.model.combat.HostileHandler;
 import civ.model.combat.SwordsmanHandler;
+import civ.model.diplomacy.DiplomacyTable;
 import civ.model.event.EventBus;
 import civ.model.event.GameEvent;
 import civ.model.factory.BuildingFactory;
 import civ.model.factory.UnitFactory;
+import civ.model.trade.TradeOffers;
 import civ.model.trade.TradeService;
 import civ.model.trade.TradeTracker;
 import civ.model.tribe.Quest;
@@ -31,7 +33,9 @@ import civ.model.map.MapPreset;
 import civ.model.world.Season;
 import civ.util.HexGeometry;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 
 public class Game extends Entity {
@@ -45,6 +49,9 @@ public class Game extends Entity {
     private Battle battle;
     private final TradeTracker tradeTracker = new TradeTracker();
     private final TradeService tradeService = new TradeService();
+    private final DiplomacyTable diplomacy = new DiplomacyTable();
+    private final TradeOffers tradeOffers = new TradeOffers();
+    private final Map<Long, List<BattleReport>> pendingReports = new HashMap<>();
     private final TribeTurnBehaviour tribeBehaviour = new TribeTurnBehaviour();
     private DisasterRoller disasterRoller;
     private final List<MilitaryUnit> hostiles = new ArrayList<>();
@@ -435,6 +442,29 @@ public class Game extends Entity {
             }
         }
         return null;
+    }
+
+    public DiplomacyTable getDiplomacy() {
+        return diplomacy;
+    }
+
+    public TradeOffers getTradeOffers() {
+        return tradeOffers;
+    }
+
+    public void queueReportFor(Player player, BattleReport report) {
+        if (player == null || report == null) {
+            return;
+        }
+        pendingReports.computeIfAbsent(player.getId(), key -> new ArrayList<>()).add(report);
+    }
+
+    public List<BattleReport> takeReportsFor(Player player) {
+        if (player == null) {
+            return List.of();
+        }
+        List<BattleReport> reports = pendingReports.remove(player.getId());
+        return reports == null ? List.of() : reports;
     }
 
     public boolean isTurnOf(Player player) {
@@ -1304,6 +1334,7 @@ public class Game extends Entity {
         if (from == null || to == null) {
             return result;
         }
+        Player me = getCurrentPlayer();
         int distance = HexGeometry.distance(
                 from.getCol(), from.getRow(), to.getCol(), to.getRow());
         for (Unit unit : unitsAt(from)) {
@@ -1314,7 +1345,74 @@ public class Game extends Entity {
             if (military.isHostile() || military.getAp() < 1) {
                 continue;
             }
+            if (!owns(me, military)) {
+                continue;
+            }
             if (distance == 2 && !(military instanceof Archer)) {
+                continue;
+            }
+            result.add(military);
+        }
+        return result;
+    }
+
+    public boolean ownsAllUnitsAt(Player player, Hex hex) {
+        if (player == null || hex == null) {
+            return false;
+        }
+        List<Unit> here = unitsAt(hex);
+        if (here.isEmpty()) {
+            return false;
+        }
+        for (Unit unit : here) {
+            if (!owns(player, unit)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Owner of opposing player units or buildings on this hex.
+     * AI hostiles and tribes return null (no diplomatic state).
+     */
+    public Player ownerOfUnitsAt(Hex hex) {
+        if (hex == null) {
+            return null;
+        }
+        for (Unit unit : unitsAt(hex)) {
+            if (unit instanceof MilitaryUnit && ((MilitaryUnit) unit).isHostile()) {
+                continue;
+            }
+            Player owner = getPlayer(unit.getOwnerId());
+            if (owner != null && owner.getId() != getCurrentPlayer().getId()) {
+                return owner;
+            }
+        }
+        Building building = hex.getBuilding();
+        if (building != null && !owns(getCurrentPlayer(), building)
+                && !(building instanceof TribeCamp)) {
+            return getPlayer(building.getOwnerId());
+        }
+        return null;
+    }
+
+    /** Other players' military on this hex. */
+    public List<MilitaryUnit> enemyPlayerMilitaryAt(Hex hex) {
+        List<MilitaryUnit> result = new ArrayList<>();
+        if (hex == null) {
+            return result;
+        }
+        Player me = getCurrentPlayer();
+        for (Unit unit : unitsAt(hex)) {
+            if (!(unit instanceof MilitaryUnit)) {
+                continue;
+            }
+            MilitaryUnit military = (MilitaryUnit) unit;
+            if (military.isHostile()) {
+                continue;
+            }
+            if (owns(me, military)) {
                 continue;
             }
             result.add(military);
@@ -1334,12 +1432,21 @@ public class Game extends Entity {
         if (attackersOn(from, to).isEmpty()) {
             return false;
         }
+        Player defender = ownerOfUnitsAt(to);
+        boolean warOk = defender == null || diplomacy.canAttack(getCurrentPlayer(), defender);
+        boolean enemyUnits = !enemyPlayerMilitaryAt(to).isEmpty();
         if (distance == 1) {
-            return !hostilesAt(to).isEmpty() || canStrikeStructure(to) || canCapture(to)
+            return !hostilesAt(to).isEmpty()
+                    || (enemyUnits && warOk)
+                    || canStrikeStructure(to)
+                    || canCapture(to)
                     || canStrikeTribeCamp(to);
         }
         if (distance == 2) {
-            return !hostilesAt(to).isEmpty() || canStrikeStructure(to) || canStrikeTribeCamp(to);
+            return !hostilesAt(to).isEmpty()
+                    || (enemyUnits && warOk)
+                    || canStrikeStructure(to)
+                    || canStrikeTribeCamp(to);
         }
         return false;
     }
@@ -1359,7 +1466,10 @@ public class Game extends Entity {
     }
 
     public boolean isDiceAttack(Hex from, Hex to) {
-        return canAttack(from, to) && !hostilesAt(to).isEmpty();
+        if (!canAttack(from, to)) {
+            return false;
+        }
+        return !hostilesAt(to).isEmpty() || !enemyPlayerMilitaryAt(to).isEmpty();
     }
 
     public BattleReport beginDiceAttack(Hex from, Hex to) {
@@ -1367,7 +1477,10 @@ public class Game extends Entity {
             return null;
         }
         List<MilitaryUnit> attackers = attackersOn(from, to);
-        List<MilitaryUnit> defenders = hostilesAt(to);
+        List<MilitaryUnit> defenders = new ArrayList<>(hostilesAt(to));
+        if (defenders.isEmpty()) {
+            defenders.addAll(enemyPlayerMilitaryAt(to));
+        }
         for (MilitaryUnit unit : attackers) {
             unit.spend(1);
         }
@@ -1399,6 +1512,7 @@ public class Game extends Entity {
                 : map.get(pendingDefenders.get(0).getCol(), pendingDefenders.get(0).getRow());
         for (MilitaryUnit unit : new ArrayList<>(pendingDefenders)) {
             if (unit.isDead()) {
+                pendingReport.noteUnitLost(unit.getTypeName());
                 if (pendingAttackedTribe != null && killHex != null) {
                     noteQuestKill(pendingAttackedTribe, killHex);
                 }
@@ -1439,6 +1553,37 @@ public class Game extends Entity {
         if (building != null && !owns(getCurrentPlayer(), building)) {
             strikeBuilding(building, battle.damageToStructure(attackers));
         }
+    }
+
+    /** Quiet attack that also returns a report for the defender's inbox. */
+    public BattleReport performQuietAttackWithReport(Hex from, Hex to) {
+        if (!canAttack(from, to) || isDiceAttack(from, to)) {
+            return null;
+        }
+        List<MilitaryUnit> attackers = attackersOn(from, to);
+        for (MilitaryUnit unit : attackers) {
+            unit.spend(1);
+        }
+        if (canCapture(to)) {
+            claimFor(getCurrentPlayer(), to);
+            addLog("The hex was captured without a fight.");
+            return null;
+        }
+        Building building = to.getBuilding();
+        if (canStrikeTribeCamp(to)) {
+            Tribe tribe = tribeAt(to);
+            noteAggressionOnTribe(tribe);
+            int damage = battle.damageToStructure(attackers);
+            strikeBuilding(building, damage);
+            return BattleReport.structureOnly(damage, "tribe camp");
+        }
+        if (building != null && !owns(getCurrentPlayer(), building)) {
+            int damage = battle.damageToStructure(attackers);
+            String label = building.getType().name().toLowerCase().replace('_', ' ');
+            strikeBuilding(building, damage);
+            return BattleReport.structureOnly(damage, label);
+        }
+        return null;
     }
 
     public void attackWall(Hex from, Hex to) {
@@ -1493,16 +1638,6 @@ public class Game extends Entity {
         }
     }
 
-    private boolean canCapture(Hex to) {
-        if (isClaimed(to) || to.getBuilding() != null) {
-            return false;
-        }
-        if (!to.getTerrain().isLand()) {
-            return false;
-        }
-        return hostilesAt(to).isEmpty();
-    }
-
     private boolean canStrikeStructure(Hex to) {
         Building building = to.getBuilding();
         if (building == null || owns(getCurrentPlayer(), building)) {
@@ -1511,7 +1646,14 @@ public class Game extends Entity {
         if (building instanceof TribeCamp) {
             return false;
         }
-        return hostilesAt(to).isEmpty();
+        if (!hostilesAt(to).isEmpty() || !enemyPlayerMilitaryAt(to).isEmpty()) {
+            return false;
+        }
+        Player owner = getPlayer(building.getOwnerId());
+        if (owner != null && !diplomacy.canAttack(getCurrentPlayer(), owner)) {
+            return false;
+        }
+        return true;
     }
 
     private boolean canStrikeTribeCamp(Hex to) {
@@ -1519,7 +1661,17 @@ public class Game extends Entity {
         if (tribe == null || tribe.isDestroyed()) {
             return false;
         }
-        return hostilesAt(to).isEmpty();
+        return hostilesAt(to).isEmpty() && enemyPlayerMilitaryAt(to).isEmpty();
+    }
+
+    private boolean canCapture(Hex to) {
+        if (isClaimed(to) || to.getBuilding() != null) {
+            return false;
+        }
+        if (!to.getTerrain().isLand()) {
+            return false;
+        }
+        return hostilesAt(to).isEmpty() && enemyPlayerMilitaryAt(to).isEmpty();
     }
 
     private int attackerDiceCount(List<MilitaryUnit> attackers, int distance) {
@@ -1555,6 +1707,7 @@ public class Game extends Entity {
         boolean barbarian = false;
         boolean animal = false;
         boolean tribeGuard = false;
+        boolean playerUnit = false;
         for (MilitaryUnit unit : defenders) {
             if (unit instanceof Barbarian) {
                 barbarian = true;
@@ -1565,6 +1718,12 @@ public class Game extends Entity {
             if (unit instanceof TribeGuard) {
                 tribeGuard = true;
             }
+            if (!unit.isHostile() && !(unit instanceof TribeGuard)) {
+                playerUnit = true;
+            }
+        }
+        if (playerUnit) {
+            return attackerDiceCount(defenders, 1);
         }
         if (barbarian || tribeGuard) {
             return 2;

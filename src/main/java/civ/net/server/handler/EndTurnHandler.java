@@ -3,7 +3,9 @@ package civ.net.server.handler;
 import civ.model.Game;
 import civ.model.Player;
 import civ.model.TurnEngine;
+import civ.model.combat.BattleReport;
 import civ.net.protocol.Message;
+import civ.net.protocol.push.BattleReportPush;
 import civ.net.protocol.push.GameOverBroadcast;
 import civ.net.protocol.request.EndTurnRequest;
 import civ.net.server.ClientHandler;
@@ -69,6 +71,20 @@ public class EndTurnHandler implements RequestHandler {
             session.getClients().broadcast(new GameOverBroadcast(winner.getName()));
         }
 
+        deliverPendingReports(session, game.getCurrentPlayer());
         StateFilter.broadcast(session);
+    }
+
+    private static void deliverPendingReports(ServerSession session, Player next) {
+        if (next == null) {
+            return;
+        }
+        ClientHandler client = session.getClients().byPlayerId(next.getId());
+        if (client == null) {
+            return;
+        }
+        for (BattleReport report : session.getGame().takeReportsFor(next)) {
+            client.send(new BattleReportPush(report, false));
+        }
     }
 }

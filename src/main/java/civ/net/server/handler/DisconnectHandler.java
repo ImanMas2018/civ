@@ -32,6 +32,9 @@ public class DisconnectHandler {
         player.setConnected(false);
         session.getClients().broadcast(new NoticePush(player.getName() + " has disconnected."));
 
+        // Do not leave anybody's resources locked in a trade that can never be answered.
+        game.getTradeOffers().cancelAllFrom(game, player);
+
         if (game.isTurnOf(player)) {
             session.getClients().broadcast(new NoticePush(
                     "Ending " + player.getName() + "'s turn automatically."));
