@@ -24,6 +24,13 @@ tasks.register('runClient', JavaExec) {
     standardInput = System.in
 }
 
+// ./gradlew smokeNet  — headless lobby/chat check
+tasks.register('smokeNet', JavaExec) {
+    group = 'verification'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'civ.SmokeNet'
+}
+
 dependencies {
     implementation 'com.google.code.gson:gson:2.10.1'
 }
