@@ -261,6 +261,9 @@ public class MainWindow extends JFrame {
     }
 
     private void shutdownNetwork() {
+        if (lobbyController != null) {
+            lobbyController.stopHeartbeat();
+        }
         if (networkManager != null) {
             networkManager.disconnect();
             networkManager = null;

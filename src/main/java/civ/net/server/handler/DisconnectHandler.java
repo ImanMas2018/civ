@@ -31,6 +31,13 @@ public class DisconnectHandler {
 
         player.setConnected(false);
         session.getClients().broadcast(new NoticePush(player.getName() + " has disconnected."));
-        StateFilter.broadcast(session);
+
+        if (game.isTurnOf(player)) {
+            session.getClients().broadcast(new NoticePush(
+                    "Ending " + player.getName() + "'s turn automatically."));
+            EndTurnHandler.endTurnFor(session, game, player);
+        } else {
+            StateFilter.broadcast(session);
+        }
     }
 }

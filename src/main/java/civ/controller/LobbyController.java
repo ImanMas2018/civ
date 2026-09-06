@@ -1,6 +1,7 @@
 package civ.controller;
 
 import civ.net.client.ClientState;
+import civ.net.client.HeartbeatClient;
 import civ.net.client.NetworkManager;
 import civ.net.protocol.Message;
 import civ.net.protocol.MessageCodec;
@@ -34,6 +35,7 @@ public class LobbyController {
     private String localName = "";
     private String host;
     private int port;
+    private HeartbeatClient heartbeatClient;
     private boolean gameStarted;
 
     public LobbyController(NetworkManager network,
@@ -85,7 +87,15 @@ public class LobbyController {
     }
 
     public void leave() {
+        stopHeartbeat();
         network.disconnect();
+    }
+
+    public void stopHeartbeat() {
+        if (heartbeatClient != null) {
+            heartbeatClient.stop();
+            heartbeatClient = null;
+        }
     }
 
     /** Dump the last fog-filtered snapshot as compact JSON (debug / evaluation). */
@@ -117,6 +127,7 @@ public class LobbyController {
             clientState.replace(state);
             if (first) {
                 gameStarted = true;
+                startHeartbeat(state.yourPlayerId);
                 onGameStarted.accept(state);
             }
         } else if (message instanceof GameOverBroadcast) {
@@ -134,4 +145,16 @@ public class LobbyController {
         }
     }
 
+    private void startHeartbeat(long playerId) {
+        stopHeartbeat();
+        if (host == null) {
+            return;
+        }
+        try {
+            heartbeatClient = new HeartbeatClient(host, port, playerId);
+            heartbeatClient.start();
+        } catch (Exception ex) {
+            System.err.println("Could not start heartbeat: " + ex.getMessage());
+        }
+    }
 }

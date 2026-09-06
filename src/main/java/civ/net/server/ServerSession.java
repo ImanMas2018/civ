@@ -4,8 +4,10 @@ import civ.model.Game;
 import civ.model.Player;
 import civ.net.protocol.Message;
 import civ.net.protocol.push.LobbyStateBroadcast;
+import civ.net.protocol.push.NoticePush;
 import civ.net.protocol.response.ErrorResponse;
 import civ.net.server.handler.DisconnectHandler;
+import civ.net.server.handler.EndTurnHandler;
 import civ.net.server.handler.RequestHandler;
 import java.util.ArrayList;
 import java.util.List;
@@ -20,6 +22,7 @@ public class ServerSession {
     private final RequestRouter router;
 
     private Game game;
+    private HeartbeatServer heartbeatServer;
 
     public ServerSession(ClientRegistry clients) {
         this.clients = clients;
@@ -44,6 +47,41 @@ public class ServerSession {
 
     public ClientRegistry getClients() {
         return clients;
+    }
+
+    public void setHeartbeatServer(HeartbeatServer heartbeatServer) {
+        this.heartbeatServer = heartbeatServer;
+    }
+
+    public void noteHeartbeat(long playerId) {
+        if (heartbeatServer != null) {
+            heartbeatServer.note(playerId);
+        }
+    }
+
+    /**
+     * Called by the UDP sweeper when a player has been silent for ~10 seconds.
+     * Marks them disconnected and auto-ends their turn if needed.
+     */
+    public void markSilent(long playerId) {
+        synchronized (lock) {
+            if (game == null) {
+                return;
+            }
+            Player player = game.getPlayer(playerId);
+            if (player == null || !player.isConnected()) {
+                return;
+            }
+            player.setConnected(false);
+            clients.broadcast(new NoticePush(player.getName() + " has disconnected."));
+            if (game.isTurnOf(player)) {
+                clients.broadcast(new NoticePush(
+                        "Ending " + player.getName() + "'s turn automatically."));
+                EndTurnHandler.endTurnFor(this, game, player);
+            } else {
+                StateFilter.broadcast(this);
+            }
+        }
     }
 
     public void handle(ClientHandler client, Message message) {
@@ -88,6 +126,9 @@ public class ServerSession {
 
     public void onDisconnect(ClientHandler client) {
         synchronized (lock) {
+            if (heartbeatServer != null && client.getPlayerId() > 0) {
+                heartbeatServer.forget(client.getPlayerId());
+            }
             new DisconnectHandler().handle(this, client);
         }
     }

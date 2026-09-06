@@ -9,6 +9,7 @@ public class GameServer {
     private final int port;
     private final ServerSession session;
     private final ClientRegistry clients = new ClientRegistry();
+    private final HeartbeatServer heartbeatServer;
 
     private ServerSocket serverSocket;
     private volatile boolean running = false;
@@ -16,6 +17,8 @@ public class GameServer {
     public GameServer(int port) {
         this.port = port;
         this.session = new ServerSession(clients);
+        this.heartbeatServer = new HeartbeatServer(port, session);
+        this.session.setHeartbeatServer(heartbeatServer);
     }
 
     public int getPort() {
@@ -34,7 +37,9 @@ public class GameServer {
         acceptor.setDaemon(true);
         acceptor.start();
 
-        System.out.println("Server listening on port " + port);
+        heartbeatServer.start();
+
+        System.out.println("Server listening on port " + port + " (TCP+UDP)");
     }
 
     private void acceptLoop() {
@@ -53,6 +58,7 @@ public class GameServer {
 
     public void stop() {
         running = false;
+        heartbeatServer.stop();
         clients.closeAll();
         try {
             if (serverSocket != null) {

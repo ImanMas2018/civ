@@ -56,6 +56,7 @@ public class StartGameHandler implements RequestHandler {
                 Player player = game.getPlayers().get(index);
                 handler.setPlayerId(player.getId());
                 player.setHost(seat.host);
+                session.noteHeartbeat(player.getId());
             }
             index++;
         }
