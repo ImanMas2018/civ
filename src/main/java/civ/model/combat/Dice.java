@@ -16,8 +16,9 @@ public class Dice {
     public List<Integer> roll(int count, int bonus) {
         List<Integer> results = new ArrayList<>();
         for (int i = 0; i < count; i++) {
-            int value = 1 + random.nextInt(6);
-            results.add(Math.min(6, value + bonus));
+            // No upper clamp: a combat-buffed die may show 7.
+            int value = 1 + random.nextInt(6) + bonus;
+            results.add(value);
         }
         results.sort(Collections.reverseOrder());
         return results;

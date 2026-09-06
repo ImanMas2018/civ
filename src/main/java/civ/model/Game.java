@@ -1,5 +1,6 @@
 package civ.model;
 
+import civ.model.command.CraftItemCommand;
 import civ.model.command.ResearchTechCommand;
 import civ.model.command.TrainUnitCommand;
 import civ.model.command.UpgradeTownHallCommand;
@@ -16,6 +17,9 @@ import civ.model.event.EventBus;
 import civ.model.event.GameEvent;
 import civ.model.factory.BuildingFactory;
 import civ.model.factory.UnitFactory;
+import civ.model.item.Item;
+import civ.model.item.ItemFactory;
+import civ.model.item.ItemType;
 import civ.model.trade.TradeOffers;
 import civ.model.trade.TradeService;
 import civ.model.trade.TradeTracker;
@@ -1356,6 +1360,132 @@ public class Game extends Entity {
         return result;
     }
 
+    private int attackerCombatBonus(List<MilitaryUnit> attackers) {
+        for (MilitaryUnit unit : attackers) {
+            if (unit.isCombatBuffed()) {
+                return 1;
+            }
+        }
+        return 0;
+    }
+
+    public boolean anyUnitAt(Hex hex) {
+        return hex != null && !unitsAt(hex).isEmpty();
+    }
+
+    /**
+     * Whether {@code unit} could stand on {@code hex} (terrain / seafaring / blocked),
+     * ignoring AP, adjacency and stacking. Used by teleport validation.
+     */
+    public boolean isPassableFor(Unit unit, Hex hex) {
+        if (unit == null || hex == null) {
+            return false;
+        }
+        if (!hex.getTerrain().isPassable() || hex.isBlocked()) {
+            return false;
+        }
+        if (hex.getTerrain().isSea()) {
+            Player owner = getPlayer(unit.getOwnerId());
+            Empire empire = owner != null ? owner.getEmpire() : getEmpire();
+            return empire.hasTech(Tech.SEAFARING);
+        }
+        return true;
+    }
+
+    public void expireItemEffects(Player player) {
+        if (player == null) {
+            return;
+        }
+        for (Unit unit : player.getEmpire().getUnits()) {
+            if (unit instanceof MilitaryUnit) {
+                ((MilitaryUnit) unit).setCombatBuffed(false);
+            }
+        }
+        player.clearItemUsedThisTurn();
+    }
+
+    public boolean canCraftItem(Apothecary apothecary, ItemType type) {
+        if (apothecary == null || type == null) {
+            return false;
+        }
+        Player me = getCurrentPlayer();
+        if (!owns(me, apothecary) || apothecary.isBusy()) {
+            return false;
+        }
+        Stockpile stock = me.getEmpire().getStock();
+        for (Map.Entry<ResourceType, Integer> entry : type.getCost().entrySet()) {
+            if (entry.getValue() > 0 && !stock.canPay(entry.getKey(), entry.getValue())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public String craftItemRejection(Apothecary apothecary, ItemType type) {
+        if (apothecary == null) {
+            return "No Apothecary selected.";
+        }
+        Player me = getCurrentPlayer();
+        if (!owns(me, apothecary)) {
+            return "That Apothecary does not belong to you.";
+        }
+        if (apothecary.isBusy()) {
+            return "The Apothecary is already crafting.";
+        }
+        Stockpile stock = me.getEmpire().getStock();
+        for (Map.Entry<ResourceType, Integer> entry : type.getCost().entrySet()) {
+            if (entry.getValue() > 0 && !stock.canPay(entry.getKey(), entry.getValue())) {
+                return "You do not have enough " + entry.getKey().getLabel().toLowerCase()
+                        + " for this.";
+            }
+        }
+        return null;
+    }
+
+    public void craftItem(Apothecary apothecary, ItemType type) {
+        if (!canCraftItem(apothecary, type)) {
+            return;
+        }
+        apothecary.start(new CraftItemCommand(type, getCurrentPlayer()), this);
+    }
+
+    public String useItemRejection(Player player, ItemType type, Unit target, Hex destination) {
+        if (player == null || type == null) {
+            return "Invalid item use.";
+        }
+        if (target == null) {
+            return "Select one of your units.";
+        }
+        if (!owns(player, target)) {
+            return "You can only use items on your own units.";
+        }
+        if (target instanceof MilitaryUnit && ((MilitaryUnit) target).isHostile()) {
+            return "You can only use items on your own units.";
+        }
+        if (player.hasUsedItem(target)) {
+            return "This unit has already used an item this turn.";
+        }
+        if (!player.getEmpire().getInventory().has(type)) {
+            return "You do not have that item.";
+        }
+        Item item = ItemFactory.create(type);
+        return item.rejectionReason(this, player, target, destination);
+    }
+
+    public boolean canUseItem(Player player, ItemType type, Unit target, Hex destination) {
+        return useItemRejection(player, type, target, destination) == null;
+    }
+
+    public void useItem(Player player, ItemType type, Unit target, Hex destination) {
+        if (!canUseItem(player, type, target, destination)) {
+            return;
+        }
+        Item item = ItemFactory.create(type);
+        item.apply(this, player, target, destination);
+        player.getEmpire().getInventory().remove(type);
+        player.markItemUsed(target);
+    }
+
     public boolean ownsAllUnitsAt(Player player, Hex hex) {
         if (player == null || hex == null) {
             return false;
@@ -1496,6 +1626,7 @@ public class Game extends Entity {
         pendingReport = battle.resolve(
                 attackerDiceCount(attackers, distance),
                 defenderDice(defenders),
+                attackerCombatBonus(attackers),
                 wallBonus(from, to));
         return pendingReport;
     }

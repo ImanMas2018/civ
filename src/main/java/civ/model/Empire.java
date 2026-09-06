@@ -1,5 +1,6 @@
 package civ.model;
 
+import civ.model.item.Inventory;
 import civ.model.world.Happiness;
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -11,6 +12,7 @@ import java.util.Set;
 public class Empire {
 
     private final Stockpile stock = new Stockpile(100);
+    private final Inventory inventory = new Inventory();
     private final List<Unit> units = new ArrayList<>();
     private final List<Building> buildings = new ArrayList<>();
     private final Set<Tech> techs = EnumSet.noneOf(Tech.class);
@@ -21,6 +23,10 @@ public class Empire {
 
     public Stockpile getStock() {
         return stock;
+    }
+
+    public Inventory getInventory() {
+        return inventory;
     }
 
     public List<Unit> getUnits() {

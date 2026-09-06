@@ -16,8 +16,10 @@ public class TurnEngine {
         Empire empire = acting.getEmpire();
         int turnBefore = game.getTurn();
 
+        game.expireItemEffects(acting);
         produceResources(game, empire);
         advanceTownHallQueue(game, empire);
+        advanceApothecaryQueues(game, empire);
         payUpkeep(game, empire);
         eatFood(game, empire);
         checkStarvation(game, acting);
@@ -97,6 +99,14 @@ public class TurnEngine {
         for (Building building : empire.getBuildings()) {
             if (building instanceof TownHall && building != hall) {
                 ((TownHall) building).tick(game);
+            }
+        }
+    }
+
+    private void advanceApothecaryQueues(Game game, Empire empire) {
+        for (Building building : empire.getBuildings()) {
+            if (building instanceof Apothecary) {
+                ((Apothecary) building).tick(game);
             }
         }
     }

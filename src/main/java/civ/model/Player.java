@@ -1,11 +1,15 @@
 package civ.model;
 
+import java.util.HashSet;
+import java.util.Set;
+
 public class Player extends Entity {
 
     private final String name;
     private final PlayerColour colour;
     private final Empire empire = new Empire();
     private final Fog fog;
+    private final Set<Long> unitsThatUsedAnItem = new HashSet<>();
 
     private boolean alive = true;
     private boolean connected = true;
@@ -81,5 +85,19 @@ public class Player extends Entity {
 
     public void setStarving(boolean starving) {
         this.starving = starving;
+    }
+
+    public boolean hasUsedItem(Unit unit) {
+        return unit != null && unitsThatUsedAnItem.contains(unit.getId());
+    }
+
+    public void markItemUsed(Unit unit) {
+        if (unit != null) {
+            unitsThatUsedAnItem.add(unit.getId());
+        }
+    }
+
+    public void clearItemUsedThisTurn() {
+        unitsThatUsedAnItem.clear();
     }
 }
