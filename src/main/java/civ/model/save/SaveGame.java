@@ -25,6 +25,12 @@ public class SaveGame {
     public int stone;
     public int iron;
 
+    /** Per-player fog grids (single-player: one entry). Prefer this over HexData flags. */
+    public boolean[][] fogDiscovered;
+    public boolean[][] fogOwned;
+    public String playerName;
+    public String playerColour;
+
     public int townHallLevel;
     public int townHallHp;
     public int townHallMaxHp;
@@ -49,6 +55,7 @@ public class SaveGame {
         public int depositAmount;
         public boolean discovered;
         public boolean owned;
+        public boolean reserved;
         public boolean road;
         public boolean blocked;
     }
@@ -86,11 +93,11 @@ public class SaveGame {
         public Integer attackPower;
         public Integer attackRange;
         public Integer stationBuildingId;
-        public Integer tribeId;
+        public Long tribeId;
     }
 
     public static class TribeData {
-        public int id;
+        public long id;
         public String name;
         public String type;
         public int campCol;

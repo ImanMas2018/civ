@@ -100,21 +100,36 @@ public class HudPanel extends JPanel {
     }
 
     public void refresh() {
-        Empire empire = game.getEmpire();
+        Empire empire = game.getViewpointPlayer().getEmpire();
         Map<ResourceType, Integer> rate = empire.netRatePerTurn(game.getMap(), game.getTribes());
 
+        civ.model.Player current = game.getCurrentPlayer();
         turnLabel.setText("Turn " + game.getTurn()
-                + "  " + game.getSeason().getLabel());
+                + "  " + game.getSeason().getLabel()
+                + "  —  " + current.getName() + "'s turn");
+        turnLabel.setForeground(current.getColour().getAwt());
+
+        boolean myTurn = controller == null || controller.isMyTurn();
+        endTurnButton.setEnabled(myTurn);
+        endTurnButton.setToolTipText(myTurn ? null : "It is not your turn.");
 
         resourcePanel.removeAll();
         for (ResourceType type : ResourceType.values()) {
             int amount = empire.getStock().get(type);
+            int locked = empire.getStock().getLocked(type);
             int perTurn = rate.get(type);
-            JLabel label = new JLabel(type.getLabel() + " " + amount + "/"
-                    + empire.getStock().getCapacity()
-                    + "  (" + (perTurn >= 0 ? "+" : "") + perTurn + ")");
+            String text = type.getLabel() + " " + amount + "/"
+                    + empire.getStock().getCapacity();
+            if (locked > 0) {
+                text += " (" + locked + " locked)";
+            }
+            text += "  (" + (perTurn >= 0 ? "+" : "") + perTurn + ")";
+            JLabel label = new JLabel(text);
             label.setFont(new Font("SansSerif", Font.PLAIN, 13));
             label.setForeground(perTurn < 0 ? NEGATIVE : TEXT);
+            if (locked > 0) {
+                label.setToolTipText(locked + " reserved for pending trade offers.");
+            }
             resourcePanel.add(label);
         }
 
@@ -129,14 +144,18 @@ public class HudPanel extends JPanel {
                 + " C" + empire.countUnits("Cavalry") + ")");
 
         TownHall townHall = empire.getTownHall();
-        townHallLabel.setText(townHall.describeLevel()
-                + "  HP " + townHall.getHp() + "/" + townHall.getMaxHp()
-                + "  Happy " + empire.happiness()
-                + " (" + empire.getHappiness().getLevelName() + ")");
+        if (townHall != null) {
+            townHallLabel.setText(townHall.describeLevel()
+                    + "  HP " + townHall.getHp() + "/" + townHall.getMaxHp()
+                    + "  Happy " + empire.happiness()
+                    + " (" + empire.getHappiness().getLevelName() + ")");
+            queueLabel.setText(townHall.describeQueue());
+        } else {
+            townHallLabel.setText("No Town Hall");
+            queueLabel.setText("");
+        }
 
-        queueLabel.setText(townHall.describeQueue());
-
-        if (game.isStarving()) {
+        if (game.isStarving(game.getViewpointPlayer())) {
             warningLabel.setText("STARVATION!");
             warningLabel.setForeground(NEGATIVE);
         } else {

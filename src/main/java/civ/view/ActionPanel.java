@@ -130,6 +130,11 @@ public class ActionPanel extends JPanel implements Scrollable {
                             reasonWhyNot(builder, type),
                             () -> controller.build(builder, type));
                 }
+                Hex foundHex = game.hexOf(builder);
+                addButton("Found Town Hall  (200w 150s 80i 100f)",
+                        game.canFoundTownHall(builder, foundHex),
+                        foundTownHallReason(builder, foundHex),
+                        () -> controller.foundTownHall(builder));
                 Hex demolishHex = game.getInspected() != null
                         ? game.getInspected() : game.hexOf(builder);
                 addButton("Demolish building/road here",
@@ -199,6 +204,28 @@ public class ActionPanel extends JPanel implements Scrollable {
                         ? "Own the Trading Post hex first."
                         : "Already used the Trading Post this turn.",
                 () -> controller.openTradingPost());
+        if (controller != null && controller.isNetworked()) {
+            int inbox = game.getTradeOffers().pendingFor(game.getViewpointPlayer()).size();
+            addButton("Player trade inbox" + (inbox > 0 ? " (" + inbox + ")" : ""),
+                    true, null, () -> controller.openTradeInbox());
+            addButton("New player trade offer",
+                    controller.isMyTurn(),
+                    "It is not your turn.",
+                    () -> controller.openNewTradeOffer());
+        }
+
+        if (controller != null && (controller.isNetworked() || game.getPlayers().size() > 1)) {
+            add(Box.createVerticalStrut(8));
+            addTitle("Diplomacy");
+            addButton("Open diplomacy", true, null, () -> controller.openDiplomacy());
+        }
+
+        add(Box.createVerticalStrut(8));
+        addTitle("Items");
+        addButton("Inventory / Apothecary", true, null, () -> controller.openItems());
+        if (controller != null && controller.isTeleporting()) {
+            addBody("Teleport: click a destination hex. Esc cancels.");
+        }
 
         java.util.List<civ.model.tribe.Tribe> known = new java.util.ArrayList<>();
         for (civ.model.tribe.Tribe tribe : game.getTribes()) {
@@ -217,7 +244,13 @@ public class ActionPanel extends JPanel implements Scrollable {
 
         add(Box.createVerticalStrut(12));
         addTitle("Town Hall");
-        TownHall townHall = game.getEmpire().getTownHall();
+        TownHall townHall = game.getViewpointPlayer().getEmpire().getTownHall();
+        if (townHall == null) {
+            addBody("No Town Hall.");
+            revalidate();
+            repaint();
+            return;
+        }
         addBody(townHall.describeLevel());
         addBody("HP " + townHall.getHp() + "/" + townHall.getMaxHp()
                 + "  Defence " + townHall.getDefence());
@@ -245,7 +278,7 @@ public class ActionPanel extends JPanel implements Scrollable {
                     () -> controller.train(blueprint));
         }
         for (Tech tech : Tech.values()) {
-            if (game.getEmpire().hasTech(tech)) {
+            if (game.getViewpointPlayer().getEmpire().hasTech(tech)) {
                 continue;
             }
             addButton("Research " + tech.getLabel()
@@ -262,11 +295,30 @@ public class ActionPanel extends JPanel implements Scrollable {
         repaint();
     }
 
+    private String foundTownHallReason(Builder builder, Hex hex) {
+        if (!builder.hasCharge()) {
+            return "This builder has no charges left.";
+        }
+        if (hex == null || !hex.getTerrain().isLand()) {
+            return "Need a land hex.";
+        }
+        if (hex.getBuilding() != null) {
+            return "This hex already has a building.";
+        }
+        if (game.isOwned(game.getViewpointPlayer(), hex)) {
+            return "Must found outside your current borders.";
+        }
+        if (game.isClaimed(hex)) {
+            return "This hex is already claimed.";
+        }
+        return "Needs 200 wood, 150 stone, 80 iron, 100 food and 1 AP.";
+    }
+
     private String reasonWhyNot(Builder builder, BuildingType type) {
         if (!builder.hasCharge()) {
             return "This builder has no charges left.";
         }
-        if (!game.hexOf(builder).isOwned()) {
+        if (!game.isOwned(game.getViewpointPlayer(), game.hexOf(builder))) {
             return "This hex is outside your border.";
         }
         if (!game.hexOf(builder).getTerrain().isLand()) {
@@ -279,44 +331,58 @@ public class ActionPanel extends JPanel implements Scrollable {
             return "A Dock needs a coastal land hex (next to sea).";
         }
         if (type.getRequiredTech() != null
-                && !game.getEmpire().hasTech(type.getRequiredTech())) {
+                && !game.getViewpointPlayer().getEmpire().hasTech(type.getRequiredTech())) {
             return "Needs the technology: " + type.getRequiredTech().getLabel();
         }
-        if (type.getRequiredLevel() > game.getEmpire().getTownHall().getLevel()) {
+        if (game.getViewpointPlayer().getEmpire().getTownHall() == null
+                || type.getRequiredLevel() > game.getViewpointPlayer().getEmpire().getTownHall().getLevel()) {
             return "Needs Town Hall level " + type.getRequiredLevel();
         }
         if (type.getRequiredTerrain() != null
                 && game.hexOf(builder).getTerrain() != type.getRequiredTerrain()) {
             return "Needs terrain: " + type.getRequiredTerrain().getLabel();
         }
+        if (type == BuildingType.APOTHECARY
+                && game.getViewpointPlayer().getEmpire().getTownHall() != null
+                && game.getViewpointPlayer().getEmpire().getTownHall().getLevel() < 2) {
+            return "Needs Town Hall level 2.";
+        }
         return "The deposit, AP or resources are not enough.";
     }
 
     private String trainReason(UnitBlueprint blueprint) {
-        if (game.getEmpire().getTownHall().isBusy()) {
+        TownHall hall = game.getViewpointPlayer().getEmpire().getTownHall();
+        if (hall == null) {
+            return "No Town Hall.";
+        }
+        if (hall.isBusy()) {
             return "Town Hall is busy. Cancel the current order first.";
         }
-        if (blueprint.getRequiredLevel() > game.getEmpire().getTownHall().getLevel()) {
+        if (blueprint.getRequiredLevel() > hall.getLevel()) {
             return "Needs Town Hall level " + blueprint.getRequiredLevel();
         }
         if (blueprint == UnitBlueprint.CAVALRY && !game.hasMilitaryStable()) {
             return "Needs a Military Stable on the map.";
         }
         if (blueprint.isMilitary()
-                && game.getEmpire().countMilitary() >= game.getEmpire().getMilitaryCap()) {
+                && game.getViewpointPlayer().getEmpire().countMilitary() >= game.getViewpointPlayer().getEmpire().getMilitaryCap()) {
             return "Military unit cap reached.";
         }
         return "Unit cap reached, or not enough food/wood.";
     }
 
     private String researchReason(Tech tech) {
-        if (game.getEmpire().getTownHall().isBusy()) {
+        TownHall hall = game.getViewpointPlayer().getEmpire().getTownHall();
+        if (hall == null) {
+            return "No Town Hall.";
+        }
+        if (hall.isBusy()) {
             return "Town Hall is busy. Cancel the current order first.";
         }
-        if (tech.getRequiredLevel() > game.getEmpire().getTownHall().getLevel()) {
+        if (tech.getRequiredLevel() > hall.getLevel()) {
             return "Needs Town Hall level " + tech.getRequiredLevel();
         }
-        if (tech.getRequired() != null && !game.getEmpire().hasTech(tech.getRequired())) {
+        if (tech.getRequired() != null && !game.getViewpointPlayer().getEmpire().hasTech(tech.getRequired())) {
             return "Needs " + tech.getRequired().getLabel() + " first.";
         }
         return "Not enough resources.";
@@ -352,10 +418,14 @@ public class ActionPanel extends JPanel implements Scrollable {
     }
 
     private void addButton(String text, boolean enabled, String reason, Runnable action) {
+        boolean myTurn = controller == null || controller.isMyTurn();
+        boolean reallyEnabled = enabled && myTurn;
+        String tip = !myTurn ? "It is not your turn." : reason;
+
         // No fixed-width HTML block: that was wider than the content area and
         // made Swing clip the left, so labels looked shifted to the right.
         JButton button = new JButton("<html><center>" + text + "</center></html>");
-        button.setEnabled(enabled);
+        button.setEnabled(reallyEnabled);
         button.setAlignmentX(LEFT_ALIGNMENT);
         button.setHorizontalAlignment(SwingConstants.CENTER);
         button.setVerticalAlignment(SwingConstants.CENTER);
@@ -369,8 +439,8 @@ public class ActionPanel extends JPanel implements Scrollable {
         button.setMaximumSize(new Dimension(Integer.MAX_VALUE, height));
         button.setMinimumSize(new Dimension(0, height));
 
-        if (!enabled) {
-            button.setToolTipText(reason);
+        if (!reallyEnabled) {
+            button.setToolTipText(tip);
         }
         button.addActionListener(e -> action.run());
         add(button);

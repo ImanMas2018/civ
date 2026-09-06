@@ -90,6 +90,12 @@ public class SaveService {
         data.unitCap = empire.getUnitCap();
         data.lastBearTurn = game.getLastBearTurn();
 
+        civ.model.Player player = game.getCurrentPlayer();
+        data.playerName = player.getName();
+        data.playerColour = player.getColour().name();
+        data.fogDiscovered = player.getFog().copyDiscovered();
+        data.fogOwned = player.getFog().copyOwned();
+
         Stockpile stock = empire.getStock();
         data.stockCapacity = stock.getCapacity();
         data.food = stock.get(ResourceType.FOOD);
@@ -140,6 +146,7 @@ public class SaveService {
         happiness.setMilitaryCapHit(data.militaryCapHit);
 
         applyHexes(game.getMap(), data);
+        applyPlayerFog(game, data);
         applyEdges(game.getMap(), data);
 
         Map<Integer, Building> buildingsById = new HashMap<>();
@@ -310,8 +317,7 @@ public class SaveService {
                 hd.col = col;
                 hd.row = row;
                 hd.depositAmount = hex.getDepositAmount();
-                hd.discovered = hex.isDiscovered();
-                hd.owned = hex.isOwned();
+                hd.reserved = hex.isReserved();
                 hd.road = hex.hasRoad();
                 hd.blocked = hex.isBlocked();
                 data.hexes.add(hd);
@@ -454,7 +460,7 @@ public class SaveService {
 
     private static SaveGame.UnitData captureUnit(Unit unit, int id,
                                                  Map<Building, Integer> buildingIds,
-                                                 Integer tribeId) {
+                                                 Long tribeId) {
         SaveGame.UnitData ud = new SaveGame.UnitData();
         ud.id = id;
         ud.type = unit.getTypeName();
@@ -491,15 +497,37 @@ public class SaveService {
 
     // ------------------------------------------------------------------ apply helpers
 
+    private static void applyPlayerFog(Game game, SaveGame data) {
+        civ.model.Player player = game.getCurrentPlayer();
+        if (data.fogDiscovered != null || data.fogOwned != null) {
+            player.getFog().loadDiscovered(data.fogDiscovered);
+            player.getFog().loadOwned(data.fogOwned);
+            return;
+        }
+        // Migrate pre-phase-3 saves that stored fog on each hex.
+        for (SaveGame.HexData hd : data.hexes) {
+            Hex hex = game.getMap().get(hd.col, hd.row);
+            if (hex == null) {
+                continue;
+            }
+            if (hd.discovered) {
+                player.getFog().discover(hex);
+            }
+            if (hd.owned) {
+                player.getFog().claim(hex);
+            }
+        }
+    }
+
     private static void applyHexes(GameMap map, SaveGame data) {
+
         for (SaveGame.HexData hd : data.hexes) {
             Hex hex = map.get(hd.col, hd.row);
             if (hex == null) {
                 continue;
             }
             hex.setDepositAmount(hd.depositAmount);
-            hex.setDiscovered(hd.discovered);
-            hex.setOwned(hd.owned);
+            hex.setReserved(hd.reserved);
             hex.setRoad(hd.road);
             hex.setBlocked(hd.blocked);
         }
@@ -533,6 +561,7 @@ public class SaveService {
         restoreBuildingFields(townHall, thData);
         townHall.restoreState(data.townHallLevel, data.townHallHp, data.townHallMaxHp,
                 data.townHallDefence, data.townHallWall);
+        townHall.setOwnerId(game.getCurrentPlayer().getId());
         hex.setBuilding(townHall);
         empire.setTownHall(townHall);
         buildingsById.put(thData.id, townHall);
@@ -548,6 +577,7 @@ public class SaveService {
             BuildingType type = BuildingType.valueOf(bd.type);
             Hex hex = requireHex(game.getMap(), bd.col, bd.row);
             Building building = createBuildingSilent(type, hex);
+            building.setOwnerId(game.getCurrentPlayer().getId());
             restoreBuildingFields(building, bd);
             buildingsById.put(bd.id, building);
 
@@ -599,6 +629,7 @@ public class SaveService {
         for (SaveGame.UnitData ud : data.units) {
             Unit unit = createPlayerUnit(ud);
             restoreUnitFields(unit, ud);
+            unit.setOwnerId(game.getCurrentPlayer().getId());
             empire.getUnits().add(unit);
             unitsById.put(ud.id, unit);
         }

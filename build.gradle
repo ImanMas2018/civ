@@ -15,6 +15,22 @@ application {
     mainClass = 'civ.Main'
 }
 
+// ./gradlew runClient  — start as many of these as you like
+tasks.register('runClient', JavaExec) {
+    group = 'application'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'civ.Main'
+    args = ['client']
+    standardInput = System.in
+}
+
+// ./gradlew smokeNet  — headless lobby/chat check
+tasks.register('smokeNet', JavaExec) {
+    group = 'verification'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'civ.SmokeNet'
+}
+
 dependencies {
     implementation 'com.google.code.gson:gson:2.10.1'
 }

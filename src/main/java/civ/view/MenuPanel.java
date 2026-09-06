@@ -34,11 +34,15 @@ public class MenuPanel extends JPanel {
         title.setAlignmentX(Component.CENTER_ALIGNMENT);
 
         JButton start = makeButton("Start");
+        JButton multiplayer = makeButton("Multiplayer");
+        JButton hotseat = makeButton("Hot-seat (2P)");
         JButton load = makeButton("Load");
         JButton settings = makeButton("Settings");
         JButton exit = makeButton("Exit");
 
         start.addActionListener(e -> window.startNewGame());
+        multiplayer.addActionListener(e -> window.showConnect(false));
+        hotseat.addActionListener(e -> window.startHotseatGame());
         load.addActionListener(e -> window.showLoadMenu());
         settings.addActionListener(e -> showSettings(window));
         exit.addActionListener(e -> confirmExit());
@@ -46,6 +50,10 @@ public class MenuPanel extends JPanel {
         column.add(title);
         column.add(Box.createVerticalStrut(40));
         column.add(start);
+        column.add(Box.createVerticalStrut(12));
+        column.add(multiplayer);
+        column.add(Box.createVerticalStrut(12));
+        column.add(hotseat);
         column.add(Box.createVerticalStrut(12));
         column.add(load);
         column.add(Box.createVerticalStrut(12));

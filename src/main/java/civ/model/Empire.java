@@ -1,5 +1,6 @@
 package civ.model;
 
+import civ.model.item.Inventory;
 import civ.model.world.Happiness;
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -11,6 +12,7 @@ import java.util.Set;
 public class Empire {
 
     private final Stockpile stock = new Stockpile(100);
+    private final Inventory inventory = new Inventory();
     private final List<Unit> units = new ArrayList<>();
     private final List<Building> buildings = new ArrayList<>();
     private final Set<Tech> techs = EnumSet.noneOf(Tech.class);
@@ -21,6 +23,10 @@ public class Empire {
 
     public Stockpile getStock() {
         return stock;
+    }
+
+    public Inventory getInventory() {
+        return inventory;
     }
 
     public List<Unit> getUnits() {
@@ -43,6 +49,33 @@ public class Empire {
         this.townHall = townHall;
         if (townHall != null && !buildings.contains(townHall)) {
             buildings.add(townHall);
+        }
+    }
+
+    /** Adds a Town Hall; the first one (or replacement after loss) becomes primary. */
+    public void addTownHall(TownHall hall) {
+        if (hall == null) {
+            return;
+        }
+        if (!buildings.contains(hall)) {
+            buildings.add(hall);
+        }
+        if (townHall == null) {
+            townHall = hall;
+        }
+    }
+
+    /** After a Town Hall is destroyed, promote another remaining one or clear primary. */
+    public void forgetTownHall(TownHall fallen) {
+        buildings.remove(fallen);
+        if (townHall == fallen) {
+            townHall = null;
+            for (Building building : buildings) {
+                if (building instanceof TownHall && !building.isDestroyed()) {
+                    townHall = (TownHall) building;
+                    break;
+                }
+            }
         }
     }
 
@@ -79,7 +112,7 @@ public class Empire {
         if (tech.getRequired() != null && !hasTech(tech.getRequired())) {
             return false;
         }
-        if (townHall != null && tech.getRequiredLevel() > townHall.getLevel()) {
+        if (townHall == null || tech.getRequiredLevel() > townHall.getLevel()) {
             return false;
         }
         return stock.canPay(tech.getWoodCost(), tech.getStoneCost(), tech.getIronCost());
@@ -99,8 +132,11 @@ public class Empire {
         return n;
     }
 
-    /** Follows Town Hall level (5 / 10 / 15). Level 1 until upgrades exist. */
+    /** Follows Town Hall level (5 / 10 / 15). Safe if the primary hall is gone. */
     public int getMilitaryCap() {
+        if (townHall == null) {
+            return 0;
+        }
         return 5 * townHall.getLevel();
     }
 

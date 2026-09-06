@@ -7,6 +7,11 @@ public class Outpost extends Building {
         setHealth(40, 40);
     }
 
+    public Outpost(long id, long createdAt, Hex hex) {
+        super(id, createdAt, BuildingType.OUTPOST, hex);
+        setHealth(40, 40);
+    }
+
     @Override
     public int outputPerTurn(Empire empire, GameMap map) {
         return 0;

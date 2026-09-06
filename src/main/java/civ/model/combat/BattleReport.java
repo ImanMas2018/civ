@@ -40,6 +40,9 @@ public class BattleReport {
     private final List<Pair> pairs;
     private final int hitsOnAttacker;
     private final int hitsOnDefender;
+    private int structureDamage;
+    private final List<String> unitsLost = new ArrayList<>();
+    private String targetLabel = "";
 
     public BattleReport(List<Integer> attackRolls, List<Integer> defenceRolls,
                         List<Pair> pairs, int hitsOnAttacker, int hitsOnDefender) {
@@ -48,6 +51,15 @@ public class BattleReport {
         this.pairs = Collections.unmodifiableList(new ArrayList<>(pairs));
         this.hitsOnAttacker = hitsOnAttacker;
         this.hitsOnDefender = hitsOnDefender;
+    }
+
+    /** Structure-only strike (no dice). */
+    public static BattleReport structureOnly(int damage, String targetLabel) {
+        BattleReport report = new BattleReport(
+                List.of(), List.of(), List.of(), 0, 0);
+        report.structureDamage = damage;
+        report.targetLabel = targetLabel == null ? "" : targetLabel;
+        return report;
     }
 
     public List<Integer> getAttackRolls() {
@@ -68,5 +80,55 @@ public class BattleReport {
 
     public int getHitsOnDefender() {
         return hitsOnDefender;
+    }
+
+    public int getStructureDamage() {
+        return structureDamage;
+    }
+
+    public void setStructureDamage(int structureDamage) {
+        this.structureDamage = structureDamage;
+    }
+
+    public List<String> getUnitsLost() {
+        return unitsLost;
+    }
+
+    public void noteUnitLost(String description) {
+        if (description != null && !description.isEmpty()) {
+            unitsLost.add(description);
+        }
+    }
+
+    public String getTargetLabel() {
+        return targetLabel;
+    }
+
+    public void setTargetLabel(String targetLabel) {
+        this.targetLabel = targetLabel == null ? "" : targetLabel;
+    }
+
+    public String summary() {
+        StringBuilder text = new StringBuilder();
+        if (!attackRolls.isEmpty() || !defenceRolls.isEmpty()) {
+            text.append("Hits on defender: ").append(hitsOnDefender)
+                    .append(", hits on attacker: ").append(hitsOnAttacker);
+        }
+        if (structureDamage > 0) {
+            if (text.length() > 0) {
+                text.append(". ");
+            }
+            text.append("Structure damage: ").append(structureDamage);
+            if (!targetLabel.isEmpty()) {
+                text.append(" to ").append(targetLabel);
+            }
+        }
+        if (!unitsLost.isEmpty()) {
+            if (text.length() > 0) {
+                text.append(". ");
+            }
+            text.append("Lost: ").append(String.join(", ", unitsLost));
+        }
+        return text.length() == 0 ? "Battle resolved." : text.toString();
     }
 }

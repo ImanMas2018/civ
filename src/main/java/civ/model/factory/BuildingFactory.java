@@ -1,5 +1,6 @@
 package civ.model.factory;
 
+import civ.model.Apothecary;
 import civ.model.Building;
 import civ.model.BuildingType;
 import civ.model.Hex;
@@ -26,6 +27,8 @@ public class BuildingFactory {
             building = new TradingPost(hex);
         } else if (type == BuildingType.OUTPOST) {
             building = new Outpost(hex);
+        } else if (type == BuildingType.APOTHECARY) {
+            building = new Apothecary(hex);
         } else {
             building = new ProductionBuilding(type, hex);
         }

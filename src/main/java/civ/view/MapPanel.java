@@ -389,7 +389,7 @@ public class MapPanel extends JPanel {
     private void drawHex(Graphics2D g2, Hex hex, double cx, double cy) {
         HexGeometry.writeHexPath(hexShape, cx, cy, screenHexSize() * 0.98);
 
-        if (!hex.isDiscovered()) {
+        if (!game.isDiscovered(game.getViewpointPlayer(), hex)) {
             g2.setColor(FOG_FILL);
             g2.fill(hexShape);
             g2.setColor(FOG_EDGE);
@@ -405,7 +405,12 @@ public class MapPanel extends JPanel {
         g2.setStroke(THIN);
         g2.draw(hexShape);
 
-        if (hex.isOwned()) {
+        civ.model.Player owner = game.ownerOf(hex);
+        if (owner != null) {
+            g2.setColor(diplomacyOutline(owner));
+            g2.setStroke(THICK);
+            g2.draw(hexShape);
+        } else if (hex.isReserved()) {
             g2.setColor(OWNED_EDGE);
             g2.setStroke(THICK);
             g2.draw(hexShape);
@@ -459,7 +464,8 @@ public class MapPanel extends JPanel {
             if (a == null || b == null) {
                 continue;
             }
-            if (!a.isDiscovered() && !b.isDiscovered()) {
+            if (!game.isDiscovered(game.getViewpointPlayer(), a)
+                    && !game.isDiscovered(game.getViewpointPlayer(), b)) {
                 continue;
             }
             double x1 = HexGeometry.centerX(a.getCol(), a.getRow(), HEX_SIZE) * zoom();
@@ -607,10 +613,16 @@ public class MapPanel extends JPanel {
     }
 
     private List<Unit> visibleUnits() {
-        List<Unit> units = new ArrayList<>(game.getUnits());
+        List<Unit> units = new ArrayList<>();
+        for (Unit unit : game.getAllUnits()) {
+            Hex tile = game.hexOf(unit);
+            if (tile != null && game.isDiscovered(game.getViewpointPlayer(), tile)) {
+                units.add(unit);
+            }
+        }
         for (MilitaryUnit hostile : game.getHostiles()) {
             Hex tile = game.hexOf(hostile);
-            if (tile != null && tile.isDiscovered()) {
+            if (tile != null && game.isDiscovered(game.getViewpointPlayer(), tile)) {
                 units.add(hostile);
             }
         }
@@ -620,7 +632,7 @@ public class MapPanel extends JPanel {
             }
             for (civ.model.tribe.TribeGuard guard : tribe.getGuards()) {
                 Hex tile = game.hexOf(guard);
-                if (tile != null && tile.isDiscovered()) {
+                if (tile != null && game.isDiscovered(game.getViewpointPlayer(), tile)) {
                     units.add(guard);
                 }
             }
@@ -730,14 +742,14 @@ public class MapPanel extends JPanel {
         if (boat) {
             g2.fillRoundRect((int) (cx - radius), (int) (cy - radius / 2.0 + 6),
                     radius * 2, radius, radius / 2, radius / 2);
-            g2.setColor(Color.BLACK);
-            g2.setStroke(THIN);
+            g2.setColor(unitOutline(unit));
+            g2.setStroke(selected ? new BasicStroke(3f) : THICK);
             g2.drawRoundRect((int) (cx - radius), (int) (cy - radius / 2.0 + 6),
                     radius * 2, radius, radius / 2, radius / 2);
         } else {
             g2.fillOval((int) (cx - radius), (int) (cy - radius + 6), radius * 2, radius * 2);
-            g2.setColor(Color.BLACK);
-            g2.setStroke(THIN);
+            g2.setColor(unitOutline(unit));
+            g2.setStroke(selected ? new BasicStroke(3f) : THICK);
             g2.drawOval((int) (cx - radius), (int) (cy - radius + 6), radius * 2, radius * 2);
         }
 
@@ -746,5 +758,31 @@ public class MapPanel extends JPanel {
         g2.setFont(new Font("SansSerif", Font.BOLD, fontSize));
         g2.drawString(unit.getLetter() + " " + unit.getAp(),
                 (int) (cx - 8 * zoom()), (int) (cy + 10 * zoom()));
+    }
+
+    private Color diplomacyOutline(civ.model.Player owner) {
+        civ.model.Player me = game.getViewpointPlayer();
+        if (owner.getId() == me.getId()) {
+            return owner.getColour().getAwt();
+        }
+        civ.model.diplomacy.DiplomaticState state = game.getDiplomacy().between(me, owner);
+        if (state == civ.model.diplomacy.DiplomaticState.ENEMY) {
+            return new Color(200, 40, 40);
+        }
+        if (state == civ.model.diplomacy.DiplomaticState.ALLIED) {
+            return new Color(40, 170, 60);
+        }
+        return new Color(200, 200, 60);
+    }
+
+    private Color unitOutline(Unit unit) {
+        if (unit instanceof MilitaryUnit && ((MilitaryUnit) unit).isHostile()) {
+            return Color.BLACK;
+        }
+        civ.model.Player owner = game.getPlayer(unit.getOwnerId());
+        if (owner == null) {
+            return Color.BLACK;
+        }
+        return diplomacyOutline(owner);
     }
 }

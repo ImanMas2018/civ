@@ -6,6 +6,10 @@ public class Cavalry extends MilitaryUnit {
         super("Cavalry", 4, 2, col, row, 2, 8, 1);
     }
 
+    public Cavalry(long id, long createdAt, int col, int row) {
+        super(id, createdAt, "Cavalry", 4, 2, col, row, 2, 8, 1);
+    }
+
     @Override
     public String getLetter() {
         return "C";

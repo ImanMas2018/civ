@@ -13,8 +13,13 @@ public class Battle {
     }
 
     public BattleReport resolve(int attackerDiceCount, int defenderDiceCount, int defenderBonus) {
+        return resolve(attackerDiceCount, defenderDiceCount, 0, defenderBonus);
+    }
+
+    public BattleReport resolve(int attackerDiceCount, int defenderDiceCount,
+                                int attackerBonus, int defenderBonus) {
         return compare(
-                dice.roll(attackerDiceCount, 0),
+                dice.roll(attackerDiceCount, attackerBonus),
                 dice.roll(defenderDiceCount, defenderBonus));
     }
 
@@ -46,6 +51,9 @@ public class Battle {
         int total = 0;
         for (MilitaryUnit unit : attackers) {
             total += unit.getAttackPower();
+            if (unit.isCombatBuffed()) {
+                total += 5;
+            }
         }
         return total;
     }

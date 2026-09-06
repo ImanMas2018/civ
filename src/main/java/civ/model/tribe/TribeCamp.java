@@ -16,6 +16,12 @@ public class TribeCamp extends Building {
         setHealth(tribe.getType().getCampHp(), tribe.getType().getCampHp());
     }
 
+    public TribeCamp(long id, long createdAt, Tribe tribe, Hex hex) {
+        super(id, createdAt, BuildingType.TRIBE_CAMP, hex);
+        this.tribe = tribe;
+        setHealth(tribe.getType().getCampHp(), tribe.getType().getCampHp());
+    }
+
     public Tribe getTribe() {
         return tribe;
     }

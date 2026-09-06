@@ -45,15 +45,15 @@ public class BearAttack implements Disaster {
             game.addHostile(bear);
             bears.add(bear);
             spawnHexes.add(spawn);
-            spawn.setDiscovered(true);
+            game.getCurrentPlayer().getFog().discover(spawn);
         }
 
         game.setLastBearTurn(game.getTurn());
         game.runBearBehaviour();
 
-        boolean visible = den.isDiscovered();
+        boolean visible = game.isDiscovered(game.getCurrentPlayer(), den);
         for (Hex hex : spawnHexes) {
-            if (hex.isDiscovered()) {
+            if (game.isDiscovered(game.getCurrentPlayer(), hex)) {
                 visible = true;
             }
         }

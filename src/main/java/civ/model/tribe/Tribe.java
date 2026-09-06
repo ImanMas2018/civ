@@ -1,5 +1,6 @@
 package civ.model.tribe;
 
+import civ.model.Entity;
 import civ.model.Hex;
 import civ.model.ResourceType;
 import civ.model.event.EventBus;
@@ -7,11 +8,8 @@ import civ.model.event.GameEvent;
 import java.util.ArrayList;
 import java.util.List;
 
-public class Tribe {
+public class Tribe extends Entity {
 
-    private static int nextId = 1;
-
-    private final int id = nextId++;
     private final String name;
     private final TribeType type;
     private final Hex campHex;
@@ -19,6 +17,7 @@ public class Tribe {
 
     private int relation = 0;
     private RelationState state = new NeutralState();
+    /** Tribe-specific discovery flag (independent of per-player Fog). */
     private boolean discovered = false;
     private boolean destroyed = false;
     private boolean allied = false;
@@ -36,8 +35,12 @@ public class Tribe {
         this.quest = Quest.forType(type);
     }
 
-    public int getId() {
-        return id;
+    public Tribe(long id, long createdAt, String name, TribeType type, Hex campHex) {
+        super(id, createdAt);
+        this.name = name;
+        this.type = type;
+        this.campHex = campHex;
+        this.quest = Quest.forType(type);
     }
 
     public String getName() {

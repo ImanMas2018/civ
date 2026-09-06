@@ -7,11 +7,23 @@ public abstract class MilitaryUnit extends Unit {
     private final int attackRange;
 
     private int combatHp;
+    private boolean combatBuffed;
 
     protected MilitaryUnit(String typeName, int maxAp, int visionRadius,
                            int col, int row,
                            int combatHp, int attackPower, int attackRange) {
         super(typeName, maxAp, visionRadius, col, row);
+        this.maxCombatHp = combatHp;
+        this.combatHp = combatHp;
+        this.attackPower = attackPower;
+        this.attackRange = attackRange;
+        setBodyHp(80, 80);
+    }
+
+    protected MilitaryUnit(long id, long createdAt, String typeName, int maxAp, int visionRadius,
+                           int col, int row,
+                           int combatHp, int attackPower, int attackRange) {
+        super(id, createdAt, typeName, maxAp, visionRadius, col, row);
         this.maxCombatHp = combatHp;
         this.combatHp = combatHp;
         this.attackPower = attackPower;
@@ -57,11 +69,20 @@ public abstract class MilitaryUnit extends Unit {
         return combatHp <= 0;
     }
 
+    public boolean isCombatBuffed() {
+        return combatBuffed;
+    }
+
+    public void setCombatBuffed(boolean combatBuffed) {
+        this.combatBuffed = combatBuffed;
+    }
+
     @Override
     public String describe() {
         return super.describe()
                 + "  HP " + combatHp + "/" + maxCombatHp
                 + "  atk " + attackPower
-                + "  range " + attackRange;
+                + "  range " + attackRange
+                + (combatBuffed ? "  [buffed]" : "");
     }
 }
