@@ -191,6 +191,7 @@ public class MainWindow extends JFrame {
                 networkChatPanel,
                 ready -> holder[0].setReady(ready),
                 map -> holder[0].selectMap(map),
+                enabled -> holder[0].setCheats(enabled),
                 () -> holder[0].startGame(),
                 this::leaveLobby);
         holder[0] = new LobbyController(

@@ -19,11 +19,24 @@ final class HandlerSupport {
     }
 
     static Game requireGame(ServerSession session, ClientHandler client) {
+        if (session.isGameOver()) {
+            client.send(new ErrorResponse("The game is over."));
+            return null;
+        }
         Game game = session.getGame();
         if (game == null) {
             client.send(new ErrorResponse("The game has not started yet."));
         }
         return game;
+    }
+
+    /** Returns true if the request was rejected because the match has ended. */
+    static boolean rejectIfGameOver(ServerSession session, ClientHandler client) {
+        if (!session.isGameOver()) {
+            return false;
+        }
+        client.send(new ErrorResponse("The game is over."));
+        return true;
     }
 
     static Player requireTurn(ServerSession session, ClientHandler client, Game game) {

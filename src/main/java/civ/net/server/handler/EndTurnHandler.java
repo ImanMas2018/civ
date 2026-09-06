@@ -6,7 +6,6 @@ import civ.model.TurnEngine;
 import civ.model.combat.BattleReport;
 import civ.net.protocol.Message;
 import civ.net.protocol.push.BattleReportPush;
-import civ.net.protocol.push.GameOverBroadcast;
 import civ.net.protocol.request.EndTurnRequest;
 import civ.net.server.ClientHandler;
 import civ.net.server.ServerSession;
@@ -67,8 +66,8 @@ public class EndTurnHandler implements RequestHandler {
         }
 
         Player winner = game.findWinner();
-        if (winner != null && game.getPlayers().size() > 1) {
-            session.getClients().broadcast(new GameOverBroadcast(winner.getName()));
+        if (winner != null && game.getPlayers().size() > 1 && !session.isGameOver()) {
+            session.markGameOver(winner.getName());
         }
 
         deliverPendingReports(session, game.getCurrentPlayer());

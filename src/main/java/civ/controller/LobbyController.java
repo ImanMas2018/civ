@@ -14,9 +14,11 @@ import civ.net.protocol.push.GameStateBroadcast;
 import civ.net.protocol.push.LobbyStateBroadcast;
 import civ.net.protocol.push.NoticePush;
 import civ.net.protocol.request.ChatRequest;
+import civ.net.protocol.request.CheatRequest;
 import civ.net.protocol.request.JoinRequest;
 import civ.net.protocol.request.ReadyRequest;
 import civ.net.protocol.request.SelectMapRequest;
+import civ.net.protocol.request.SetCheatsRequest;
 import civ.net.protocol.request.StartGameRequest;
 import civ.net.protocol.response.ErrorResponse;
 import civ.view.BattleReportDialog;
@@ -95,11 +97,19 @@ public class LobbyController {
         network.send(new SelectMapRequest(mapName));
     }
 
+    public void setCheats(boolean enabled) {
+        network.send(new SetCheatsRequest(enabled));
+    }
+
     public void startGame() {
         network.send(new StartGameRequest());
     }
 
     public void sendChat(String text) {
+        if (text != null && text.startsWith("/")) {
+            network.send(new CheatRequest(text));
+            return;
+        }
         network.send(new ChatRequest(text));
     }
 

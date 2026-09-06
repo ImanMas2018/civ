@@ -30,6 +30,7 @@ import civ.net.protocol.request.MoveUnitRequest;
 import civ.net.protocol.request.ReadyRequest;
 import civ.net.protocol.request.ResearchRequest;
 import civ.net.protocol.request.SelectMapRequest;
+import civ.net.protocol.request.SetCheatsRequest;
 import civ.net.protocol.request.StartGameRequest;
 import civ.net.protocol.request.StationRequest;
 import civ.net.protocol.request.TradeOfferRequest;
@@ -80,6 +81,7 @@ public final class MessageTypes {
         register(CraftItemRequest.TYPE, CraftItemRequest.class);
         register(UseItemRequest.TYPE, UseItemRequest.class);
         register(CheatRequest.TYPE, CheatRequest.class);
+        register(SetCheatsRequest.TYPE, SetCheatsRequest.class);
 
         register(OkResponse.TYPE, OkResponse.class);
         register(ErrorResponse.TYPE, ErrorResponse.class);

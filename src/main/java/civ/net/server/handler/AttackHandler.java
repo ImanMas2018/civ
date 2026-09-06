@@ -83,6 +83,10 @@ public class AttackHandler implements RequestHandler {
         }
 
         HandlerSupport.ok(client, request);
+        Player winner = game.findWinner();
+        if (winner != null && game.getPlayers().size() > 1 && !session.isGameOver()) {
+            session.markGameOver(winner.getName());
+        }
         StateFilter.broadcast(session);
     }
 }

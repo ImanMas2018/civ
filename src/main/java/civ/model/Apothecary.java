@@ -7,6 +7,9 @@ public class Apothecary extends Building {
 
     private Command activeCommand;
     private int turnsLeft;
+    /** Client-only: queue text / busy flag from the last fog-filtered snapshot. */
+    private String snapshotQueue;
+    private boolean remoteBusy;
 
     public Apothecary(Hex hex) {
         super(BuildingType.APOTHECARY, hex);
@@ -17,7 +20,7 @@ public class Apothecary extends Building {
     }
 
     public boolean isBusy() {
-        return activeCommand != null;
+        return activeCommand != null || remoteBusy;
     }
 
     public Command getActiveCommand() {
@@ -29,16 +32,18 @@ public class Apothecary extends Building {
     }
 
     public void start(Command command, Game game) {
-        if (isBusy()) {
+        if (activeCommand != null) {
             return;
         }
         command.payCost(game);
         activeCommand = command;
         turnsLeft = command.getTurnsNeeded();
+        remoteBusy = false;
+        snapshotQueue = null;
     }
 
     public void cancelCommand(Game game) {
-        if (!isBusy()) {
+        if (activeCommand == null) {
             return;
         }
         activeCommand.cancel(game);
@@ -48,7 +53,7 @@ public class Apothecary extends Building {
 
     /** Called once per turn by TurnEngine. */
     public void tick(Game game) {
-        if (!isBusy()) {
+        if (activeCommand == null) {
             return;
         }
         turnsLeft--;
@@ -59,10 +64,19 @@ public class Apothecary extends Building {
     }
 
     public String describeQueue() {
-        if (!isBusy()) {
+        if (snapshotQueue != null) {
+            return snapshotQueue;
+        }
+        if (activeCommand == null) {
             return "Apothecary: idle";
         }
         return activeCommand.getLabel() + " — " + turnsLeft + " turns left";
+    }
+
+    /** Used by SnapshotApplier so the client can show busy state without a real Command. */
+    public void applySnapshotQueue(String queue) {
+        this.snapshotQueue = queue;
+        this.remoteBusy = queue != null && !queue.contains("idle");
     }
 
     public void restoreQueue(Command command, int turnsLeft) {

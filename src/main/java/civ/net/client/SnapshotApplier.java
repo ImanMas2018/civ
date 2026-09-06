@@ -1,5 +1,6 @@
 package civ.net.client;
 
+import civ.model.Apothecary;
 import civ.model.Archer;
 import civ.model.Barbarian;
 import civ.model.Bear;
@@ -26,6 +27,7 @@ import civ.model.TradingPost;
 import civ.model.Unit;
 import civ.model.Wall;
 import civ.model.Worker;
+import civ.model.item.ItemType;
 import civ.model.map.MapPreset;
 import civ.model.tribe.Tribe;
 import civ.model.tribe.TribeCamp;
@@ -91,6 +93,7 @@ public final class SnapshotApplier {
                 }
             }
             applyStock(viewer.getEmpire(), dto.yourStock);
+            applyInventory(viewer.getEmpire(), dto.yourItems);
         }
 
         game.getDiplomacy().clear();
@@ -174,6 +177,7 @@ public final class SnapshotApplier {
             unit.restoreBodyHp(unitDto.hp, unitDto.maxHp);
             if (unit instanceof MilitaryUnit) {
                 ((MilitaryUnit) unit).setCombatHp(unitDto.combatHp);
+                ((MilitaryUnit) unit).setCombatBuffed(unitDto.combatBuffed);
             }
             if (unit instanceof Builder && unitDto.charges >= 0) {
                 ((Builder) unit).setCharges(unitDto.charges);
@@ -323,6 +327,21 @@ public final class SnapshotApplier {
         empire.getStock().setLocked(ResourceType.IRON, stock.lockedIron);
     }
 
+    private static void applyInventory(Empire empire, List<GameStateDto.ItemDto> items) {
+        for (ItemType type : ItemType.values()) {
+            empire.getInventory().set(type, 0);
+        }
+        if (items == null) {
+            return;
+        }
+        for (GameStateDto.ItemDto item : items) {
+            try {
+                empire.getInventory().set(ItemType.valueOf(item.type), item.count);
+            } catch (RuntimeException ignored) {
+            }
+        }
+    }
+
     private static void applyTradeOffers(Game game, GameStateDto dto) {
         // Client only keeps pending offers visible to this player for UI.
         // Clear by cancelling status is awkward — rebuild via reflection of ids isn't needed:
@@ -374,6 +393,11 @@ public final class SnapshotApplier {
             hall.restoreState(Math.max(1, dto.level), dto.hp, dto.maxHp,
                     dto.defensiveWall ? 30 : 10, dto.defensiveWall);
             building = hall;
+        } else if (type == BuildingType.APOTHECARY) {
+            Apothecary shop = new Apothecary(dto.id, dto.createdAt, hex);
+            shop.restoreHealth(dto.hp, dto.maxHp);
+            shop.applySnapshotQueue(dto.queue);
+            building = shop;
         } else if (type == BuildingType.TRADING_POST) {
             building = new TradingPost(dto.id, dto.createdAt, hex);
             building.restoreHealth(dto.hp, dto.maxHp);

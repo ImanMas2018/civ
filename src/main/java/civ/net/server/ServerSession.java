@@ -23,6 +23,7 @@ public class ServerSession {
 
     private Game game;
     private HeartbeatServer heartbeatServer;
+    private boolean gameOver;
 
     public ServerSession(ClientRegistry clients) {
         this.clients = clients;
@@ -43,6 +44,16 @@ public class ServerSession {
 
     public void setGame(Game game) {
         this.game = game;
+        this.gameOver = false;
+    }
+
+    public boolean isGameOver() {
+        return gameOver;
+    }
+
+    public void markGameOver(String winnerName) {
+        this.gameOver = true;
+        clients.broadcast(new civ.net.protocol.push.GameOverBroadcast(winnerName));
     }
 
     public ClientRegistry getClients() {

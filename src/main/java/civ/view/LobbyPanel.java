@@ -27,12 +27,14 @@ public class LobbyPanel extends JPanel {
     private final JList<String> playerList = new JList<>(playerModel);
     private final JComboBox<MapOption> mapCombo = new JComboBox<>();
     private final JCheckBox readyBox = new JCheckBox("Ready");
+    private final JCheckBox cheatsBox = new JCheckBox("Enable cheats");
     private final JButton startButton = new JButton("Start Game");
     private final JLabel noticeLabel = new JLabel(" ", SwingConstants.LEFT);
     private final ChatPanel chatPanel;
 
     private final Consumer<Boolean> onReady;
     private final Consumer<String> onSelectMap;
+    private final Consumer<Boolean> onSetCheats;
     private final Runnable onStart;
     private final Runnable onLeave;
 
@@ -43,11 +45,13 @@ public class LobbyPanel extends JPanel {
     public LobbyPanel(ChatPanel chatPanel,
                       Consumer<Boolean> onReady,
                       Consumer<String> onSelectMap,
+                      Consumer<Boolean> onSetCheats,
                       Runnable onStart,
                       Runnable onLeave) {
         this.chatPanel = chatPanel;
         this.onReady = onReady;
         this.onSelectMap = onSelectMap;
+        this.onSetCheats = onSetCheats;
         this.onStart = onStart;
         this.onLeave = onLeave;
 
@@ -87,6 +91,15 @@ public class LobbyPanel extends JPanel {
             }
         });
 
+        cheatsBox.setOpaque(false);
+        cheatsBox.setForeground(Color.WHITE);
+        cheatsBox.setVisible(false);
+        cheatsBox.addActionListener(e -> {
+            if (!applyingBroadcast && localIsHost) {
+                onSetCheats.accept(cheatsBox.isSelected());
+            }
+        });
+
         startButton.setEnabled(false);
         startButton.addActionListener(e -> onStart.run());
 
@@ -105,6 +118,8 @@ public class LobbyPanel extends JPanel {
         left.add(labeled("Map", mapCombo));
         left.add(Box.createVerticalStrut(8));
         left.add(readyBox);
+        left.add(Box.createVerticalStrut(4));
+        left.add(cheatsBox);
         left.add(Box.createVerticalStrut(8));
         left.add(startButton);
         left.add(Box.createVerticalStrut(8));
@@ -155,6 +170,9 @@ public class LobbyPanel extends JPanel {
             readyBox.setSelected(localReady);
             mapCombo.setEnabled(localIsHost);
             selectMapQuietly(state.getSelectedMap());
+
+            cheatsBox.setVisible(localIsHost);
+            cheatsBox.setSelected(state.isCheatsEnabled());
 
             startButton.setVisible(localIsHost);
             startButton.setEnabled(localIsHost

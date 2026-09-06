@@ -2,6 +2,7 @@ package civ.controller;
 
 import civ.model.BorderExpander;
 import civ.model.Builder;
+import civ.model.Building;
 import civ.model.BuildingType;
 import civ.model.Game;
 import civ.model.Hex;
@@ -24,6 +25,8 @@ import civ.net.protocol.request.BuildRoadRequest;
 import civ.net.protocol.request.BuildWallRequest;
 import civ.net.protocol.request.CancelTownHallOrderRequest;
 import civ.net.protocol.request.CancelTradeRequest;
+import civ.net.protocol.request.CheatRequest;
+import civ.net.protocol.request.CraftItemRequest;
 import civ.net.protocol.request.DeclareWarRequest;
 import civ.net.protocol.request.DemolishRequest;
 import civ.net.protocol.request.DemolishWallRequest;
@@ -38,10 +41,13 @@ import civ.net.protocol.request.TradeReplyRequest;
 import civ.net.protocol.request.TrainRequest;
 import civ.net.protocol.request.UnstationRequest;
 import civ.net.protocol.request.UpgradeTownHallRequest;
+import civ.net.protocol.request.UseItemRequest;
+import civ.model.item.ItemType;
 import civ.view.ActionPanel;
 import civ.view.BattlePanel;
 import civ.view.DiplomacyPanel;
 import civ.view.HudPanel;
+import civ.view.ItemPanel;
 import civ.view.MapPanel;
 import civ.view.TradeInboxPanel;
 import civ.view.TribePanel;
@@ -64,6 +70,8 @@ public class GameController {
     private boolean demolishingWall;
     private boolean attacking;
     private boolean attackingWall;
+    private boolean teleporting;
+    private ItemType pendingItem;
 
     public GameController(Game game, MapPanel mapPanel, HudPanel hudPanel, ActionPanel actionPanel) {
         this(game, mapPanel, hudPanel, actionPanel, null);
@@ -103,6 +111,15 @@ public class GameController {
         game.inspect(hex);
 
         Unit selected = game.getSelected();
+
+        if (teleporting && selected != null && pendingItem == ItemType.TELEPORT) {
+            teleporting = false;
+            ItemType type = pendingItem;
+            pendingItem = null;
+            applyItem(type, selected, hex);
+            refresh();
+            return;
+        }
 
         if (attacking && selected instanceof MilitaryUnit) {
             attacking = false;
@@ -330,6 +347,8 @@ public class GameController {
         demolishingWall = false;
         attacking = false;
         attackingWall = false;
+        teleporting = false;
+        pendingItem = null;
         refresh();
     }
 
@@ -341,6 +360,8 @@ public class GameController {
         placingWall = false;
         attacking = false;
         attackingWall = false;
+        teleporting = false;
+        pendingItem = null;
         refresh();
     }
 
@@ -352,6 +373,8 @@ public class GameController {
         attackingWall = false;
         placingWall = false;
         demolishingWall = false;
+        teleporting = false;
+        pendingItem = null;
         refresh();
     }
 
@@ -363,6 +386,8 @@ public class GameController {
         attacking = false;
         placingWall = false;
         demolishingWall = false;
+        teleporting = false;
+        pendingItem = null;
         refresh();
     }
 
@@ -382,17 +407,23 @@ public class GameController {
         return attackingWall;
     }
 
-    /** Clears wall/attack pick modes. True if something was cancelled. */
+    /** Clears wall/attack/teleport pick modes. True if something was cancelled. */
     public boolean cancelTransientMode() {
-        if (!placingWall && !demolishingWall && !attacking && !attackingWall) {
+        if (!placingWall && !demolishingWall && !attacking && !attackingWall && !teleporting) {
             return false;
         }
         placingWall = false;
         demolishingWall = false;
         attacking = false;
         attackingWall = false;
+        teleporting = false;
+        pendingItem = null;
         refresh();
         return true;
+    }
+
+    public boolean isTeleporting() {
+        return teleporting;
     }
 
     public void demolish(Builder builder, Hex hex) {
@@ -656,5 +687,67 @@ public class GameController {
             return;
         }
         network.send(new CancelTradeRequest(offerId));
+    }
+
+    public void openItems() {
+        ItemPanel.showDialog(mapPanel, game, this);
+    }
+
+    public void craftItem(long apothecaryId, ItemType type) {
+        if (!isMyTurn()) {
+            return;
+        }
+        if (isNetworked()) {
+            network.send(new CraftItemRequest(apothecaryId, type.name()));
+            return;
+        }
+        Building building = game.findBuilding(apothecaryId);
+        if (building instanceof civ.model.Apothecary) {
+            game.craftItem((civ.model.Apothecary) building, type);
+        }
+        refresh();
+    }
+
+    public void useItem(ItemType type) {
+        if (!isMyTurn()) {
+            return;
+        }
+        Unit selected = game.getSelected();
+        if (selected == null) {
+            JOptionPane.showMessageDialog(mapPanel, "Select one of your units first.");
+            return;
+        }
+        if (type == ItemType.TELEPORT) {
+            pendingItem = type;
+            teleporting = true;
+            placingWall = false;
+            demolishingWall = false;
+            attacking = false;
+            attackingWall = false;
+            JOptionPane.showMessageDialog(mapPanel,
+                    "Click a discovered, empty, passable hex to teleport to. Esc cancels.");
+            refresh();
+            return;
+        }
+        applyItem(type, selected, null);
+    }
+
+    private void applyItem(ItemType type, Unit target, Hex destination) {
+        if (isNetworked()) {
+            Integer col = destination == null ? null : destination.getCol();
+            Integer row = destination == null ? null : destination.getRow();
+            network.send(new UseItemRequest(type.name(), target.getId(), col, row));
+            refresh();
+            return;
+        }
+        String reason = game.useItemRejection(game.getCurrentPlayer(), type, target, destination);
+        if (reason != null) {
+            JOptionPane.showMessageDialog(mapPanel, reason);
+            refresh();
+            return;
+        }
+        game.useItem(game.getCurrentPlayer(), type, target, destination);
+        mapPanel.invalidateMap();
+        refresh();
     }
 }

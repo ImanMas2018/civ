@@ -220,6 +220,13 @@ public class ActionPanel extends JPanel implements Scrollable {
             addButton("Open diplomacy", true, null, () -> controller.openDiplomacy());
         }
 
+        add(Box.createVerticalStrut(8));
+        addTitle("Items");
+        addButton("Inventory / Apothecary", true, null, () -> controller.openItems());
+        if (controller != null && controller.isTeleporting()) {
+            addBody("Teleport: click a destination hex. Esc cancels.");
+        }
+
         java.util.List<civ.model.tribe.Tribe> known = new java.util.ArrayList<>();
         for (civ.model.tribe.Tribe tribe : game.getTribes()) {
             if (tribe.isDiscovered() && !tribe.isDestroyed()) {
@@ -334,6 +341,11 @@ public class ActionPanel extends JPanel implements Scrollable {
         if (type.getRequiredTerrain() != null
                 && game.hexOf(builder).getTerrain() != type.getRequiredTerrain()) {
             return "Needs terrain: " + type.getRequiredTerrain().getLabel();
+        }
+        if (type == BuildingType.APOTHECARY
+                && game.getViewpointPlayer().getEmpire().getTownHall() != null
+                && game.getViewpointPlayer().getEmpire().getTownHall().getLevel() < 2) {
+            return "Needs Town Hall level 2.";
         }
         return "The deposit, AP or resources are not enough.";
     }

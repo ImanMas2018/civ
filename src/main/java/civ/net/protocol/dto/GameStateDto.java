@@ -25,7 +25,13 @@ public class GameStateDto {
     public boolean yourStarving;
     public List<TradeOfferDto> yourInbox = new ArrayList<>();
     public List<TradeOfferDto> yourOutgoing = new ArrayList<>();
+    public List<ItemDto> yourItems = new ArrayList<>();
     public List<String> log = new ArrayList<>();
+
+    public static class ItemDto {
+        public String type;
+        public int count;
+    }
 
     public static class HexDto {
         public int col;
@@ -56,6 +62,7 @@ public class GameStateDto {
         public int charges = -1;
         public boolean stationed;
         public boolean hostile;
+        public boolean combatBuffed;
     }
 
     public static class BuildingDto {

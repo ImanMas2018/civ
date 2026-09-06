@@ -1,5 +1,6 @@
 package civ.net.server;
 
+import civ.model.Apothecary;
 import civ.model.Building;
 import civ.model.Edge;
 import civ.model.Game;
@@ -13,6 +14,8 @@ import civ.model.TownHall;
 import civ.model.Unit;
 import civ.model.Wall;
 import civ.model.Worker;
+import civ.model.item.Inventory;
+import civ.model.item.ItemType;
 import civ.model.trade.TradeOffer;
 import civ.model.tribe.Tribe;
 import civ.model.tribe.TribeCamp;
@@ -174,6 +177,7 @@ public final class StateFilter {
 
         dto.yourInbox = toTradeDtos(game, game.getTradeOffers().pendingFor(viewer));
         dto.yourOutgoing = toTradeDtos(game, game.getTradeOffers().pendingFrom(viewer));
+        dto.yourItems = toItemDtos(viewer.getEmpire().getInventory());
 
         dto.players = publicPlayerInfo(game, viewer);
         dto.log = new ArrayList<>(game.getLog());
@@ -240,6 +244,7 @@ public final class StateFilter {
             MilitaryUnit military = (MilitaryUnit) unit;
             dto.combatHp = military.getCombatHp();
             dto.maxCombatHp = military.getMaxCombatHp();
+            dto.combatBuffed = military.isCombatBuffed();
         }
         if (unit instanceof civ.model.Builder) {
             dto.charges = ((civ.model.Builder) unit).getCharges();
@@ -267,12 +272,30 @@ public final class StateFilter {
             dto.defensiveWall = hall.hasDefensiveWall();
             dto.queue = hall.describeQueue();
         }
+        if (building instanceof Apothecary) {
+            dto.queue = ((Apothecary) building).describeQueue();
+        }
         if (building instanceof ProductionBuilding) {
             for (Worker worker : ((ProductionBuilding) building).getWorkers()) {
                 dto.workerIds.add(worker.getId());
             }
         }
         return dto;
+    }
+
+    private static List<GameStateDto.ItemDto> toItemDtos(Inventory inventory) {
+        List<GameStateDto.ItemDto> list = new ArrayList<>();
+        for (ItemType type : ItemType.values()) {
+            int count = inventory.count(type);
+            if (count <= 0) {
+                continue;
+            }
+            GameStateDto.ItemDto dto = new GameStateDto.ItemDto();
+            dto.type = type.name();
+            dto.count = count;
+            list.add(dto);
+        }
+        return list;
     }
 
     private static GameStateDto.StockDto toStock(civ.model.Stockpile stock) {
