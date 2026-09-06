@@ -8,6 +8,10 @@ public class Worker extends Unit {
         super("Worker", 3, 1, col, row);
     }
 
+    public Worker(long id, long createdAt, int col, int row) {
+        super(id, createdAt, "Worker", 3, 1, col, row);
+    }
+
     public ProductionBuilding getStation() {
         return station;
     }

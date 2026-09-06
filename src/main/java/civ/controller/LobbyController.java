@@ -1,8 +1,13 @@
 package civ.controller;
 
+import civ.net.client.ClientState;
 import civ.net.client.NetworkManager;
 import civ.net.protocol.Message;
+import civ.net.protocol.MessageCodec;
+import civ.net.protocol.dto.GameStateDto;
 import civ.net.protocol.push.ChatBroadcast;
+import civ.net.protocol.push.GameOverBroadcast;
+import civ.net.protocol.push.GameStateBroadcast;
 import civ.net.protocol.push.LobbyStateBroadcast;
 import civ.net.protocol.push.NoticePush;
 import civ.net.protocol.request.ChatRequest;
@@ -16,28 +21,44 @@ import civ.view.LobbyPanel;
 import java.util.function.Consumer;
 import javax.swing.JOptionPane;
 
-/** Owns lobby UI updates. Talks only to NetworkManager, never to java.net. */
+/** Owns lobby UI updates and hands off to the game when the first snapshot arrives. */
 public class LobbyController {
 
     private final NetworkManager network;
     private final LobbyPanel lobbyPanel;
     private final ChatPanel chatPanel;
     private final Consumer<String> onFatalDisconnect;
+    private final Consumer<GameStateDto> onGameStarted;
+    private final ClientState clientState = new ClientState();
 
     private String localName = "";
+    private String host;
+    private int port;
+    private boolean gameStarted;
 
     public LobbyController(NetworkManager network,
                            LobbyPanel lobbyPanel,
                            ChatPanel chatPanel,
-                           Consumer<String> onFatalDisconnect) {
+                           Consumer<String> onFatalDisconnect,
+                           Consumer<GameStateDto> onGameStarted) {
         this.network = network;
         this.lobbyPanel = lobbyPanel;
         this.chatPanel = chatPanel;
         this.onFatalDisconnect = onFatalDisconnect;
+        this.onGameStarted = onGameStarted;
 
         network.setOnMessage(this::onMessage);
         network.setOnConnectionLost(() ->
                 onFatalDisconnect.accept("Connection to the server was lost"));
+    }
+
+    public ClientState getClientState() {
+        return clientState;
+    }
+
+    public void setEndpoint(String host, int port) {
+        this.host = host;
+        this.port = port;
     }
 
     public void joinLobby(String username) {
@@ -67,6 +88,15 @@ public class LobbyController {
         network.disconnect();
     }
 
+    /** Dump the last fog-filtered snapshot as compact JSON (debug / evaluation). */
+    public String dumpSnapshotJson() {
+        GameStateDto snapshot = clientState.get();
+        if (snapshot == null) {
+            return "{}";
+        }
+        return new MessageCodec().encode(new GameStateBroadcast(snapshot));
+    }
+
     private void onMessage(Message message) {
         if (message instanceof LobbyStateBroadcast) {
             lobbyPanel.applyState((LobbyStateBroadcast) message);
@@ -74,11 +104,34 @@ public class LobbyController {
             ChatBroadcast chat = (ChatBroadcast) message;
             chatPanel.append(chat.getTime(), chat.getSender(), chat.getText());
         } else if (message instanceof NoticePush) {
-            lobbyPanel.showNotice(((NoticePush) message).getText());
+            String text = ((NoticePush) message).getText();
+            if (gameStarted) {
+                // In-game notices stay visible via chat
+                chatPanel.append("--", "Server", text);
+            } else {
+                lobbyPanel.showNotice(text);
+            }
+        } else if (message instanceof GameStateBroadcast) {
+            GameStateDto state = ((GameStateBroadcast) message).getState();
+            boolean first = !gameStarted;
+            clientState.replace(state);
+            if (first) {
+                gameStarted = true;
+                onGameStarted.accept(state);
+            }
+        } else if (message instanceof GameOverBroadcast) {
+            String winner = ((GameOverBroadcast) message).getWinnerName();
+            JOptionPane.showMessageDialog(lobbyPanel,
+                    winner + " wins!",
+                    "Victory",
+                    JOptionPane.INFORMATION_MESSAGE);
         } else if (message instanceof ErrorResponse) {
             String reason = ((ErrorResponse) message).getReason();
             JOptionPane.showMessageDialog(lobbyPanel, reason, "Server", JOptionPane.WARNING_MESSAGE);
-            lobbyPanel.showNotice(reason);
+            if (!gameStarted) {
+                lobbyPanel.showNotice(reason);
+            }
         }
     }
+
 }

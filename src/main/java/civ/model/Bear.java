@@ -7,6 +7,11 @@ public class Bear extends MilitaryUnit {
         setBodyHp(120, 120);
     }
 
+    public Bear(long id, long createdAt, int col, int row) {
+        super(id, createdAt, "Bear", 2, 1, col, row, 2, 35, 1);
+        setBodyHp(120, 120);
+    }
+
     @Override
     public boolean isHostile() {
         return true;

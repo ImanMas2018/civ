@@ -6,6 +6,10 @@ public class BorderExpander extends Unit {
         super("Border Expander", 3, 2, col, row);
     }
 
+    public BorderExpander(long id, long createdAt, int col, int row) {
+        super(id, createdAt, "Border Expander", 3, 2, col, row);
+    }
+
     @Override
     public String getLetter() {
         return "X";

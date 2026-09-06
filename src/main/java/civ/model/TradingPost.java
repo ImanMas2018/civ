@@ -7,6 +7,11 @@ public class TradingPost extends Building {
         setHealth(60, 60);
     }
 
+    public TradingPost(long id, long createdAt, Hex hex) {
+        super(id, createdAt, BuildingType.TRADING_POST, hex);
+        setHealth(60, 60);
+    }
+
     @Override
     public int outputPerTurn(Empire empire, GameMap map) {
         return 0;

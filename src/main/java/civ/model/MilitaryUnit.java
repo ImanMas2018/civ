@@ -19,6 +19,17 @@ public abstract class MilitaryUnit extends Unit {
         setBodyHp(80, 80);
     }
 
+    protected MilitaryUnit(long id, long createdAt, String typeName, int maxAp, int visionRadius,
+                           int col, int row,
+                           int combatHp, int attackPower, int attackRange) {
+        super(id, createdAt, typeName, maxAp, visionRadius, col, row);
+        this.maxCombatHp = combatHp;
+        this.combatHp = combatHp;
+        this.attackPower = attackPower;
+        this.attackRange = attackRange;
+        setBodyHp(80, 80);
+    }
+
     @Override
     public boolean isMilitary() {
         return true;

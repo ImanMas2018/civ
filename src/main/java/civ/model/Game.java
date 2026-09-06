@@ -64,6 +64,8 @@ public class Game extends Entity {
     private int lastBearTurn = -999;
     private boolean processingTurn = false;
     private boolean disasterBusy = false;
+    /** When set (network client), fog/HUD use this player instead of the current actor. */
+    private Long viewpointPlayerId;
 
     private List<MilitaryUnit> pendingAttackers;
     private List<MilitaryUnit> pendingDefenders;
@@ -126,6 +128,21 @@ public class Game extends Entity {
         placeTradingPostNear(centreCol, centreRow);
         tribes.addAll(new TribePlacer(random).place(this, centreCol, centreRow));
         wireWorldSystems();
+    }
+
+    /**
+     * Empty designed-map shell for a network client. Players keep server ids;
+     * units/buildings/fog come exclusively from {@code GameStateDto} snapshots.
+     */
+    public Game(MapPreset preset, List<Player> seatedPlayers) {
+        this.mapSeed = 0L;
+        this.map = preset.build();
+        this.centreCol = map.getCols() / 2;
+        this.centreRow = map.getRows() / 2;
+        this.random = new Random(0L);
+        this.battle = new Battle(new Dice(random));
+        this.disasterRoller = new DisasterRoller(random);
+        players.addAll(seatedPlayers);
     }
 
     public void setTurn(int turn) {
@@ -424,6 +441,59 @@ public class Game extends Entity {
         return player != null && getCurrentPlayer().getId() == player.getId();
     }
 
+    public void setViewpointPlayerId(Long viewpointPlayerId) {
+        this.viewpointPlayerId = viewpointPlayerId;
+    }
+
+    public Long getViewpointPlayerId() {
+        return viewpointPlayerId;
+    }
+
+    /** Offline/hot-seat: same as current player. Network client: always "you". */
+    public Player getViewpointPlayer() {
+        if (viewpointPlayerId != null) {
+            Player viewer = getPlayer(viewpointPlayerId);
+            if (viewer != null) {
+                return viewer;
+            }
+        }
+        return getCurrentPlayer();
+    }
+
+    public Unit findUnit(long unitId) {
+        for (Unit unit : getAllUnits()) {
+            if (unit.getId() == unitId) {
+                return unit;
+            }
+        }
+        for (MilitaryUnit hostile : hostiles) {
+            if (hostile.getId() == unitId) {
+                return hostile;
+            }
+        }
+        return null;
+    }
+
+    public Building findBuilding(long buildingId) {
+        for (Player player : players) {
+            for (Building building : player.getEmpire().getBuildings()) {
+                if (building.getId() == buildingId) {
+                    return building;
+                }
+            }
+        }
+        for (int col = 0; col < map.getCols(); col++) {
+            for (int row = 0; row < map.getRows(); row++) {
+                Hex hex = map.get(col, row);
+                if (hex != null && hex.getBuilding() != null
+                        && hex.getBuilding().getId() == buildingId) {
+                    return hex.getBuilding();
+                }
+            }
+        }
+        return null;
+    }
+
     /** Skips eliminated and disconnected players so the game never stalls. */
     public void advanceTurn() {
         int previous = currentPlayerIndex;
@@ -577,7 +647,7 @@ public class Game extends Entity {
     }
 
     public void select(Unit unit) {
-        if (unit != null && !owns(getCurrentPlayer(), unit)) {
+        if (unit != null && !owns(getViewpointPlayer(), unit)) {
             return;
         }
         selected = unit;

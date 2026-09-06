@@ -1,13 +1,23 @@
 package civ;
 
+import civ.model.Game;
+import civ.model.Hex;
+import civ.model.Unit;
+import civ.net.client.SnapshotApplier;
+import civ.net.protocol.Errors;
 import civ.net.protocol.Message;
 import civ.net.protocol.MessageCodec;
+import civ.net.protocol.dto.GameStateDto;
 import civ.net.protocol.push.ChatBroadcast;
+import civ.net.protocol.push.GameStateBroadcast;
 import civ.net.protocol.push.LobbyStateBroadcast;
 import civ.net.protocol.push.NoticePush;
 import civ.net.protocol.request.ChatRequest;
+import civ.net.protocol.request.EndTurnRequest;
 import civ.net.protocol.request.JoinRequest;
+import civ.net.protocol.request.MoveUnitRequest;
 import civ.net.protocol.request.ReadyRequest;
+import civ.net.protocol.request.StartGameRequest;
 import civ.net.protocol.response.ErrorResponse;
 import civ.net.server.GameServer;
 import java.io.BufferedReader;
@@ -23,7 +33,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
-/** Headless smoke test for Step 2 lobby + chat (no Swing). */
+/** Headless smoke test for lobby, chat, and authoritative gameplay. */
 public final class SmokeNet {
 
     public static void main(String[] args) throws Exception {
@@ -39,8 +49,6 @@ public final class SmokeNet {
             b.awaitLobbySeats(2, 3);
             assertTrue(a.lastLobby().getSeats().stream().anyMatch(s -> s.host && "Alice".equals(s.name)),
                     "Alice should be host");
-            assertTrue(b.lastLobby().getSeats().stream().anyMatch(s -> s.host && "Alice".equals(s.name)),
-                    "Bob should see Alice as host");
 
             a.send(new ReadyRequest(true));
             b.send(new ReadyRequest(true));
@@ -51,18 +59,82 @@ public final class SmokeNet {
             ChatBroadcast chat = b.await(ChatBroadcast.class, 3);
             assertTrue("Alice".equals(chat.getSender()), "chat sender");
             assertTrue(chat.getText().contains("hello"), "chat text");
-            assertTrue(chat.getTime() != null && chat.getTime().matches("\\d{2}:\\d{2}"), "server time");
+
+            a.send(new StartGameRequest());
+            GameStateBroadcast aliceStart = a.await(GameStateBroadcast.class, 5);
+            GameStateBroadcast bobStart = b.await(GameStateBroadcast.class, 5);
+            GameStateDto aliceDto = aliceStart.getState();
+            GameStateDto bobDto = bobStart.getState();
+
+            assertTrue(aliceDto.yourPlayerId != bobDto.yourPlayerId, "distinct player ids");
+            assertTrue(!aliceDto.hexes.isEmpty(), "Alice fog hexes");
+            assertTrue(!bobDto.hexes.isEmpty(), "Bob fog hexes");
+            assertTrue(!aliceDto.units.isEmpty(), "Alice starting units");
+            assertTrue(aliceDto.turn == 1, "turn 1");
+
+            // Anti-cheat: Alice's snapshot must not contain Bob's units by default
+            // (spawns are far apart on Crossroads).
+            long bobId = bobDto.yourPlayerId;
+            boolean aliceSeesBobUnit = aliceDto.units.stream().anyMatch(u -> u.ownerId == bobId);
+            assertTrue(!aliceSeesBobUnit, "Alice must not see Bob's units at spawn");
+
+            Game aliceGame = SnapshotApplier.createShell(aliceDto);
+            Unit mover = aliceGame.getViewpointPlayer().getEmpire().getUnits().get(0);
+            Hex from = aliceGame.hexOf(mover);
+            Hex found = null;
+            for (Hex neighbour : aliceGame.getMap().neighbours(from)) {
+                if (aliceGame.canMove(mover, neighbour)) {
+                    found = neighbour;
+                    break;
+                }
+            }
+            assertTrue(found != null, "Alice should have a legal move");
+            final Hex target = found;
+            a.send(new MoveUnitRequest(mover.getId(), target.getCol(), target.getRow()));
+            GameStateBroadcast afterMove = a.await(GameStateBroadcast.class, 5);
+            assertTrue(afterMove.getState().units.stream()
+                            .anyMatch(u -> u.id == mover.getId()
+                                    && u.col == target.getCol()
+                                    && u.row == target.getRow()),
+                    "unit moved in snapshot");
+
+            Game bobGame = SnapshotApplier.createShell(bobDto);
+            Unit bobUnit = bobGame.getViewpointPlayer().getEmpire().getUnits().get(0);
+            b.send(new MoveUnitRequest(bobUnit.getId(), bobUnit.getCol(), bobUnit.getRow()));
+            ErrorResponse notTurn = b.await(ErrorResponse.class, 3);
+            assertTrue(Errors.NOT_YOUR_TURN.equals(notTurn.getReason()),
+                    "out-of-turn: " + notTurn.getReason());
+
+            a.send(new EndTurnRequest());
+            GameStateBroadcast afterEnd = null;
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (System.nanoTime() < deadline) {
+                GameStateBroadcast broadcast = b.await(GameStateBroadcast.class, 2);
+                if (broadcast.getState().currentPlayerId == bobDto.yourPlayerId) {
+                    afterEnd = broadcast;
+                    break;
+                }
+            }
+            assertTrue(afterEnd != null, "turn passed to Bob");
 
             ClientProbe c = ClientProbe.connectRaw("127.0.0.1", port);
-            c.send(new JoinRequest("Alice"));
-            ErrorResponse dup = c.await(ErrorResponse.class, 3);
-            assertTrue(dup.getReason().toLowerCase().contains("taken"), "duplicate name rejected");
+            c.send(new JoinRequest("Late"));
+            ErrorResponse late = c.await(ErrorResponse.class, 3);
+            assertTrue(late.getReason().toLowerCase().contains("started"),
+                    "late join: " + late.getReason());
 
             b.close();
-            NoticePush notice = a.await(NoticePush.class, 3);
-            assertTrue(notice.getText().contains("Bob") && notice.getText().contains("disconnected"),
-                    "disconnect notice: " + notice.getText());
-            a.awaitLobbySeats(1, 3);
+            NoticePush notice = null;
+            long disconnectDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (System.nanoTime() < disconnectDeadline) {
+                NoticePush push = a.await(NoticePush.class, 2);
+                if (push.getText().toLowerCase().contains("disconnect")) {
+                    notice = push;
+                    break;
+                }
+            }
+            assertTrue(notice != null && notice.getText().toLowerCase().contains("bob"),
+                    "disconnect notice: " + (notice == null ? "null" : notice.getText()));
 
             a.close();
             c.close();

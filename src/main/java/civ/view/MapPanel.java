@@ -389,7 +389,7 @@ public class MapPanel extends JPanel {
     private void drawHex(Graphics2D g2, Hex hex, double cx, double cy) {
         HexGeometry.writeHexPath(hexShape, cx, cy, screenHexSize() * 0.98);
 
-        if (!game.isDiscovered(game.getCurrentPlayer(), hex)) {
+        if (!game.isDiscovered(game.getViewpointPlayer(), hex)) {
             g2.setColor(FOG_FILL);
             g2.fill(hexShape);
             g2.setColor(FOG_EDGE);
@@ -464,8 +464,8 @@ public class MapPanel extends JPanel {
             if (a == null || b == null) {
                 continue;
             }
-            if (!game.isDiscovered(game.getCurrentPlayer(), a)
-                    && !game.isDiscovered(game.getCurrentPlayer(), b)) {
+            if (!game.isDiscovered(game.getViewpointPlayer(), a)
+                    && !game.isDiscovered(game.getViewpointPlayer(), b)) {
                 continue;
             }
             double x1 = HexGeometry.centerX(a.getCol(), a.getRow(), HEX_SIZE) * zoom();
@@ -616,13 +616,13 @@ public class MapPanel extends JPanel {
         List<Unit> units = new ArrayList<>();
         for (Unit unit : game.getAllUnits()) {
             Hex tile = game.hexOf(unit);
-            if (tile != null && game.isDiscovered(game.getCurrentPlayer(), tile)) {
+            if (tile != null && game.isDiscovered(game.getViewpointPlayer(), tile)) {
                 units.add(unit);
             }
         }
         for (MilitaryUnit hostile : game.getHostiles()) {
             Hex tile = game.hexOf(hostile);
-            if (tile != null && game.isDiscovered(game.getCurrentPlayer(), tile)) {
+            if (tile != null && game.isDiscovered(game.getViewpointPlayer(), tile)) {
                 units.add(hostile);
             }
         }
@@ -632,7 +632,7 @@ public class MapPanel extends JPanel {
             }
             for (civ.model.tribe.TribeGuard guard : tribe.getGuards()) {
                 Hex tile = game.hexOf(guard);
-                if (tile != null && game.isDiscovered(game.getCurrentPlayer(), tile)) {
+                if (tile != null && game.isDiscovered(game.getViewpointPlayer(), tile)) {
                     units.add(guard);
                 }
             }

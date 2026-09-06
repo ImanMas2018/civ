@@ -13,6 +13,22 @@ import civ.model.UnitBlueprint;
 import civ.model.Worker;
 import civ.model.combat.BattleReport;
 import civ.model.tribe.Tribe;
+import civ.net.client.NetworkManager;
+import civ.net.protocol.request.BuildRequest;
+import civ.net.protocol.request.BuildRoadRequest;
+import civ.net.protocol.request.BuildWallRequest;
+import civ.net.protocol.request.CancelTownHallOrderRequest;
+import civ.net.protocol.request.DemolishRequest;
+import civ.net.protocol.request.DemolishWallRequest;
+import civ.net.protocol.request.EndTurnRequest;
+import civ.net.protocol.request.ExpandBorderRequest;
+import civ.net.protocol.request.FoundTownHallRequest;
+import civ.net.protocol.request.MoveUnitRequest;
+import civ.net.protocol.request.ResearchRequest;
+import civ.net.protocol.request.StationRequest;
+import civ.net.protocol.request.TrainRequest;
+import civ.net.protocol.request.UnstationRequest;
+import civ.net.protocol.request.UpgradeTownHallRequest;
 import civ.view.ActionPanel;
 import civ.view.BattlePanel;
 import civ.view.HudPanel;
@@ -31,16 +47,35 @@ public class GameController {
     private final HudPanel hudPanel;
     private final ActionPanel actionPanel;
     private final TurnEngine turnEngine = new TurnEngine();
+    private final NetworkManager network;
+
     private boolean placingWall;
     private boolean demolishingWall;
     private boolean attacking;
     private boolean attackingWall;
 
     public GameController(Game game, MapPanel mapPanel, HudPanel hudPanel, ActionPanel actionPanel) {
+        this(game, mapPanel, hudPanel, actionPanel, null);
+    }
+
+    public GameController(Game game, MapPanel mapPanel, HudPanel hudPanel, ActionPanel actionPanel,
+                          NetworkManager network) {
         this.game = game;
         this.mapPanel = mapPanel;
         this.hudPanel = hudPanel;
         this.actionPanel = actionPanel;
+        this.network = network;
+    }
+
+    public boolean isNetworked() {
+        return network != null;
+    }
+
+    public boolean isMyTurn() {
+        if (!isNetworked()) {
+            return true;
+        }
+        return game.isTurnOf(game.getViewpointPlayer());
     }
 
     public void refresh() {
@@ -59,6 +94,11 @@ public class GameController {
         Unit selected = game.getSelected();
 
         if (attacking && selected instanceof MilitaryUnit) {
+            if (isNetworked()) {
+                attacking = false;
+                refresh();
+                return;
+            }
             attacking = false;
             Hex from = game.hexOf(selected);
             if (game.isDiceAttack(from, hex)) {
@@ -81,48 +121,82 @@ public class GameController {
         }
         if (attackingWall && selected instanceof MilitaryUnit) {
             attackingWall = false;
-            game.attackWall(game.hexOf(selected), hex);
-            mapPanel.invalidateMap();
+            if (!isNetworked()) {
+                game.attackWall(game.hexOf(selected), hex);
+                mapPanel.invalidateMap();
+            }
             refresh();
             return;
         }
 
         if (placingWall && selected instanceof Builder) {
-            game.buildWall((Builder) selected, hex);
             placingWall = false;
-            mapPanel.invalidateMap();
+            if (isNetworked()) {
+                if (!isMyTurn()) {
+                    refresh();
+                    return;
+                }
+                network.send(new BuildWallRequest(selected.getId(), hex.getCol(), hex.getRow()));
+            } else {
+                game.buildWall((Builder) selected, hex);
+                mapPanel.invalidateMap();
+            }
             refresh();
             return;
         }
         if (demolishingWall && selected instanceof Builder) {
-            game.demolishWall((Builder) selected, hex);
             demolishingWall = false;
-            mapPanel.invalidateMap();
+            if (isNetworked()) {
+                if (!isMyTurn()) {
+                    refresh();
+                    return;
+                }
+                network.send(new DemolishWallRequest(selected.getId(), hex.getCol(), hex.getRow()));
+            } else {
+                game.demolishWall((Builder) selected, hex);
+                mapPanel.invalidateMap();
+            }
             refresh();
             return;
         }
 
         if (selected instanceof BorderExpander
                 && game.canExpandBorder((BorderExpander) selected, hex)) {
-            game.expandBorder((BorderExpander) selected, hex);
-            mapPanel.invalidateMap();
+            if (isNetworked()) {
+                if (!isMyTurn()) {
+                    return;
+                }
+                network.send(new ExpandBorderRequest(selected.getId(), hex.getCol(), hex.getRow()));
+            } else {
+                game.expandBorder((BorderExpander) selected, hex);
+                mapPanel.invalidateMap();
+            }
             refresh();
             return;
         }
 
         if (selected != null && game.canMove(selected, hex)) {
-            int oldCol = selected.getCol();
-            int oldRow = selected.getRow();
-            game.moveUnit(selected, hex);
-            mapPanel.invalidateMap();
-            mapPanel.animateMove(selected, oldCol, oldRow);
+            if (isNetworked()) {
+                if (!isMyTurn()) {
+                    return;
+                }
+                network.send(new MoveUnitRequest(selected.getId(), hex.getCol(), hex.getRow()));
+            } else {
+                int oldCol = selected.getCol();
+                int oldRow = selected.getRow();
+                game.moveUnit(selected, hex);
+                mapPanel.invalidateMap();
+                mapPanel.animateMove(selected, oldCol, oldRow);
+            }
             refresh();
             return;
         }
 
         Tribe tribe = game.tribeAt(hex);
         if (tribe != null && tribe.isDiscovered() && !tribe.isDestroyed()) {
-            openTribePanel(tribe);
+            if (!isNetworked()) {
+                openTribePanel(tribe);
+            }
             game.select(null);
             refresh();
             return;
@@ -131,13 +205,14 @@ public class GameController {
         List<Unit> here = game.unitsAt(hex);
         List<Unit> mine = new java.util.ArrayList<>();
         for (Unit unit : here) {
-            if (game.owns(game.getCurrentPlayer(), unit)) {
+            if (game.owns(game.getViewpointPlayer(), unit)) {
                 mine.add(unit);
             }
         }
         if (mine.isEmpty()) {
             game.select(null);
-        } else if (selected != null && selected.isOn(hex) && game.owns(game.getCurrentPlayer(), selected)) {
+        } else if (selected != null && selected.isOn(hex)
+                && game.owns(game.getViewpointPlayer(), selected)) {
             int index = mine.indexOf(selected);
             if (index < 0) {
                 game.select(mine.get(0));
@@ -151,12 +226,28 @@ public class GameController {
     }
 
     public void build(Builder builder, BuildingType type) {
+        if (isNetworked()) {
+            if (!isMyTurn()) {
+                return;
+            }
+            Hex hex = game.hexOf(builder);
+            network.send(new BuildRequest(builder.getId(), type.name(), hex.getCol(), hex.getRow()));
+            return;
+        }
         game.build(builder, type, game.hexOf(builder));
         mapPanel.invalidateMap();
         refresh();
     }
 
     public void foundTownHall(Builder builder) {
+        if (isNetworked()) {
+            if (!isMyTurn()) {
+                return;
+            }
+            Hex hex = game.hexOf(builder);
+            network.send(new FoundTownHallRequest(builder.getId(), hex.getCol(), hex.getRow()));
+            return;
+        }
         game.foundTownHall(builder, game.hexOf(builder));
         mapPanel.invalidateMap();
         refresh();
@@ -164,24 +255,48 @@ public class GameController {
     }
 
     public void station(Worker worker) {
+        if (isNetworked()) {
+            if (!isMyTurn()) {
+                return;
+            }
+            network.send(new StationRequest(worker.getId()));
+            return;
+        }
         game.station(worker);
         mapPanel.invalidateMap();
         refresh();
     }
 
     public void unstation(Worker worker) {
+        if (isNetworked()) {
+            if (!isMyTurn()) {
+                return;
+            }
+            network.send(new UnstationRequest(worker.getId()));
+            return;
+        }
         game.unstation(worker);
         mapPanel.invalidateMap();
         refresh();
     }
 
     public void buildRoad(Builder builder) {
+        if (isNetworked()) {
+            if (!isMyTurn()) {
+                return;
+            }
+            network.send(new BuildRoadRequest(builder.getId()));
+            return;
+        }
         game.buildRoad(builder);
         mapPanel.invalidateMap();
         refresh();
     }
 
     public void startPlaceWall() {
+        if (isNetworked() && !isMyTurn()) {
+            return;
+        }
         placingWall = true;
         demolishingWall = false;
         attacking = false;
@@ -190,6 +305,9 @@ public class GameController {
     }
 
     public void startDemolishWall() {
+        if (isNetworked() && !isMyTurn()) {
+            return;
+        }
         demolishingWall = true;
         placingWall = false;
         attacking = false;
@@ -198,6 +316,9 @@ public class GameController {
     }
 
     public void startAttack() {
+        if (isNetworked()) {
+            return;
+        }
         attacking = true;
         attackingWall = false;
         placingWall = false;
@@ -206,6 +327,9 @@ public class GameController {
     }
 
     public void startAttackWall() {
+        if (isNetworked()) {
+            return;
+        }
         attackingWall = true;
         attacking = false;
         placingWall = false;
@@ -251,32 +375,84 @@ public class GameController {
         if (answer != JOptionPane.YES_OPTION) {
             return;
         }
+        if (isNetworked()) {
+            if (!isMyTurn()) {
+                return;
+            }
+            network.send(new DemolishRequest(builder.getId(), hex.getCol(), hex.getRow()));
+            return;
+        }
         game.demolish(builder, hex);
         mapPanel.invalidateMap();
         refresh();
     }
 
     public void train(UnitBlueprint blueprint) {
+        if (isNetworked()) {
+            if (!isMyTurn()) {
+                return;
+            }
+            network.send(new TrainRequest(blueprint.name()));
+            return;
+        }
         game.train(blueprint);
         refresh();
     }
 
     public void research(Tech tech) {
+        if (isNetworked()) {
+            if (!isMyTurn()) {
+                return;
+            }
+            network.send(new ResearchRequest(tech.name()));
+            return;
+        }
         game.research(tech);
         refresh();
     }
 
     public void cancelTownHallOrder() {
+        if (isNetworked()) {
+            if (!isMyTurn()) {
+                return;
+            }
+            network.send(new CancelTownHallOrderRequest());
+            return;
+        }
         game.cancelTownHallOrder();
         refresh();
     }
 
     public void upgradeTownHall() {
+        if (isNetworked()) {
+            if (!isMyTurn()) {
+                return;
+            }
+            network.send(new UpgradeTownHallRequest());
+            return;
+        }
         game.upgradeTownHall();
         refresh();
     }
 
     public void endTurn() {
+        if (isNetworked()) {
+            if (!isMyTurn()) {
+                return;
+            }
+            if (game.hasIdleUnitWithAp()) {
+                int answer = JOptionPane.showConfirmDialog(
+                        mapPanel,
+                        "Some units still have action points left. End the turn anyway?",
+                        "Idle units",
+                        JOptionPane.YES_NO_OPTION);
+                if (answer != JOptionPane.YES_OPTION) {
+                    return;
+                }
+            }
+            network.send(new EndTurnRequest());
+            return;
+        }
         if (game.hasIdleUnitWithAp()) {
             int answer = JOptionPane.showConfirmDialog(
                     mapPanel,
@@ -300,6 +476,9 @@ public class GameController {
     }
 
     private void checkVictory() {
+        if (isNetworked()) {
+            return;
+        }
         civ.model.Player winner = game.findWinner();
         if (winner != null && game.getPlayers().size() > 1) {
             JOptionPane.showMessageDialog(mapPanel,
@@ -322,10 +501,16 @@ public class GameController {
     }
 
     public void openBazaar() {
+        if (isNetworked()) {
+            return;
+        }
         civ.view.TradeDialog.showBazaar(mapPanel, game, this::refresh);
     }
 
     public void openTradingPost() {
+        if (isNetworked()) {
+            return;
+        }
         if (game.findOwnedTradingPost() == null) {
             JOptionPane.showMessageDialog(mapPanel,
                     "Claim the Trading Post hex inside your border first.");

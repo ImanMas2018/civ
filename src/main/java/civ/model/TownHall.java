@@ -20,6 +20,11 @@ public class TownHall extends Building {
         setHealth(START_HP, START_HP);
     }
 
+    public TownHall(long id, long createdAt, Hex hex) {
+        super(id, createdAt, BuildingType.TOWN_HALL, hex);
+        setHealth(START_HP, START_HP);
+    }
+
     public int getLevel() {
         return level;
     }

@@ -11,6 +11,10 @@ public class ProductionBuilding extends Building {
         super(type, hex);
     }
 
+    public ProductionBuilding(long id, long createdAt, BuildingType type, Hex hex) {
+        super(id, createdAt, type, hex);
+    }
+
     public List<Worker> getWorkers() {
         return workers;
     }

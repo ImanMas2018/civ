@@ -222,7 +222,7 @@ public class ActionPanel extends JPanel implements Scrollable {
 
         add(Box.createVerticalStrut(12));
         addTitle("Town Hall");
-        TownHall townHall = game.getEmpire().getTownHall();
+        TownHall townHall = game.getViewpointPlayer().getEmpire().getTownHall();
         if (townHall == null) {
             addBody("No Town Hall.");
             revalidate();
@@ -256,7 +256,7 @@ public class ActionPanel extends JPanel implements Scrollable {
                     () -> controller.train(blueprint));
         }
         for (Tech tech : Tech.values()) {
-            if (game.getEmpire().hasTech(tech)) {
+            if (game.getViewpointPlayer().getEmpire().hasTech(tech)) {
                 continue;
             }
             addButton("Research " + tech.getLabel()
@@ -283,7 +283,7 @@ public class ActionPanel extends JPanel implements Scrollable {
         if (hex.getBuilding() != null) {
             return "This hex already has a building.";
         }
-        if (game.isOwned(game.getCurrentPlayer(), hex)) {
+        if (game.isOwned(game.getViewpointPlayer(), hex)) {
             return "Must found outside your current borders.";
         }
         if (game.isClaimed(hex)) {
@@ -296,7 +296,7 @@ public class ActionPanel extends JPanel implements Scrollable {
         if (!builder.hasCharge()) {
             return "This builder has no charges left.";
         }
-        if (!game.isOwned(game.getCurrentPlayer(), game.hexOf(builder))) {
+        if (!game.isOwned(game.getViewpointPlayer(), game.hexOf(builder))) {
             return "This hex is outside your border.";
         }
         if (!game.hexOf(builder).getTerrain().isLand()) {
@@ -309,11 +309,11 @@ public class ActionPanel extends JPanel implements Scrollable {
             return "A Dock needs a coastal land hex (next to sea).";
         }
         if (type.getRequiredTech() != null
-                && !game.getEmpire().hasTech(type.getRequiredTech())) {
+                && !game.getViewpointPlayer().getEmpire().hasTech(type.getRequiredTech())) {
             return "Needs the technology: " + type.getRequiredTech().getLabel();
         }
-        if (game.getEmpire().getTownHall() == null
-                || type.getRequiredLevel() > game.getEmpire().getTownHall().getLevel()) {
+        if (game.getViewpointPlayer().getEmpire().getTownHall() == null
+                || type.getRequiredLevel() > game.getViewpointPlayer().getEmpire().getTownHall().getLevel()) {
             return "Needs Town Hall level " + type.getRequiredLevel();
         }
         if (type.getRequiredTerrain() != null
@@ -324,7 +324,7 @@ public class ActionPanel extends JPanel implements Scrollable {
     }
 
     private String trainReason(UnitBlueprint blueprint) {
-        TownHall hall = game.getEmpire().getTownHall();
+        TownHall hall = game.getViewpointPlayer().getEmpire().getTownHall();
         if (hall == null) {
             return "No Town Hall.";
         }
@@ -338,14 +338,14 @@ public class ActionPanel extends JPanel implements Scrollable {
             return "Needs a Military Stable on the map.";
         }
         if (blueprint.isMilitary()
-                && game.getEmpire().countMilitary() >= game.getEmpire().getMilitaryCap()) {
+                && game.getViewpointPlayer().getEmpire().countMilitary() >= game.getViewpointPlayer().getEmpire().getMilitaryCap()) {
             return "Military unit cap reached.";
         }
         return "Unit cap reached, or not enough food/wood.";
     }
 
     private String researchReason(Tech tech) {
-        TownHall hall = game.getEmpire().getTownHall();
+        TownHall hall = game.getViewpointPlayer().getEmpire().getTownHall();
         if (hall == null) {
             return "No Town Hall.";
         }
@@ -355,7 +355,7 @@ public class ActionPanel extends JPanel implements Scrollable {
         if (tech.getRequiredLevel() > hall.getLevel()) {
             return "Needs Town Hall level " + tech.getRequiredLevel();
         }
-        if (tech.getRequired() != null && !game.getEmpire().hasTech(tech.getRequired())) {
+        if (tech.getRequired() != null && !game.getViewpointPlayer().getEmpire().hasTech(tech.getRequired())) {
             return "Needs " + tech.getRequired().getLabel() + " first.";
         }
         return "Not enough resources.";
@@ -391,10 +391,14 @@ public class ActionPanel extends JPanel implements Scrollable {
     }
 
     private void addButton(String text, boolean enabled, String reason, Runnable action) {
+        boolean myTurn = controller == null || controller.isMyTurn();
+        boolean reallyEnabled = enabled && myTurn;
+        String tip = !myTurn ? "It is not your turn." : reason;
+
         // No fixed-width HTML block: that was wider than the content area and
         // made Swing clip the left, so labels looked shifted to the right.
         JButton button = new JButton("<html><center>" + text + "</center></html>");
-        button.setEnabled(enabled);
+        button.setEnabled(reallyEnabled);
         button.setAlignmentX(LEFT_ALIGNMENT);
         button.setHorizontalAlignment(SwingConstants.CENTER);
         button.setVerticalAlignment(SwingConstants.CENTER);
@@ -408,8 +412,8 @@ public class ActionPanel extends JPanel implements Scrollable {
         button.setMaximumSize(new Dimension(Integer.MAX_VALUE, height));
         button.setMinimumSize(new Dimension(0, height));
 
-        if (!enabled) {
-            button.setToolTipText(reason);
+        if (!reallyEnabled) {
+            button.setToolTipText(tip);
         }
         button.addActionListener(e -> action.run());
         add(button);

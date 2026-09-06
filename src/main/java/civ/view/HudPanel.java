@@ -100,7 +100,7 @@ public class HudPanel extends JPanel {
     }
 
     public void refresh() {
-        Empire empire = game.getEmpire();
+        Empire empire = game.getViewpointPlayer().getEmpire();
         Map<ResourceType, Integer> rate = empire.netRatePerTurn(game.getMap(), game.getTribes());
 
         civ.model.Player current = game.getCurrentPlayer();
@@ -108,6 +108,10 @@ public class HudPanel extends JPanel {
                 + "  " + game.getSeason().getLabel()
                 + "  —  " + current.getName() + "'s turn");
         turnLabel.setForeground(current.getColour().getAwt());
+
+        boolean myTurn = controller == null || controller.isMyTurn();
+        endTurnButton.setEnabled(myTurn);
+        endTurnButton.setToolTipText(myTurn ? null : "It is not your turn.");
 
         resourcePanel.removeAll();
         for (ResourceType type : ResourceType.values()) {
@@ -143,7 +147,7 @@ public class HudPanel extends JPanel {
             queueLabel.setText("");
         }
 
-        if (game.isStarving()) {
+        if (game.isStarving(game.getViewpointPlayer())) {
             warningLabel.setText("STARVATION!");
             warningLabel.setForeground(NEGATIVE);
         } else {
