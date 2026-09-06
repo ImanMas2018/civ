@@ -68,6 +68,7 @@ public class GameController {
                         game.applyPendingDiceAttack();
                         mapPanel.invalidateMap();
                         refresh();
+                        checkVictory();
                     });
                 }
             } else if (game.canAttack(from, hex)) {
@@ -75,6 +76,7 @@ public class GameController {
                 mapPanel.invalidateMap();
             }
             refresh();
+            checkVictory();
             return;
         }
         if (attackingWall && selected instanceof MilitaryUnit) {
@@ -127,12 +129,23 @@ public class GameController {
         }
 
         List<Unit> here = game.unitsAt(hex);
-        if (here.isEmpty()) {
+        List<Unit> mine = new java.util.ArrayList<>();
+        for (Unit unit : here) {
+            if (game.owns(game.getCurrentPlayer(), unit)) {
+                mine.add(unit);
+            }
+        }
+        if (mine.isEmpty()) {
             game.select(null);
-        } else if (selected != null && selected.isOn(hex)) {
-            game.select(game.nextUnitOn(hex, selected));
+        } else if (selected != null && selected.isOn(hex) && game.owns(game.getCurrentPlayer(), selected)) {
+            int index = mine.indexOf(selected);
+            if (index < 0) {
+                game.select(mine.get(0));
+            } else {
+                game.select(mine.get((index + 1) % mine.size()));
+            }
         } else {
-            game.select(here.get(0));
+            game.select(mine.get(0));
         }
         refresh();
     }
@@ -141,6 +154,13 @@ public class GameController {
         game.build(builder, type, game.hexOf(builder));
         mapPanel.invalidateMap();
         refresh();
+    }
+
+    public void foundTownHall(Builder builder) {
+        game.foundTownHall(builder, game.hexOf(builder));
+        mapPanel.invalidateMap();
+        refresh();
+        checkVictory();
     }
 
     public void station(Worker worker) {
@@ -276,6 +296,17 @@ public class GameController {
         game.select(null);
         mapPanel.invalidateMap();
         refresh();
+        checkVictory();
+    }
+
+    private void checkVictory() {
+        civ.model.Player winner = game.findWinner();
+        if (winner != null && game.getPlayers().size() > 1) {
+            JOptionPane.showMessageDialog(mapPanel,
+                    winner.getName() + " wins!",
+                    "Victory",
+                    JOptionPane.INFORMATION_MESSAGE);
+        }
     }
 
     public void openTribePanel(Tribe tribe) {

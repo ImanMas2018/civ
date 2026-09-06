@@ -46,6 +46,33 @@ public class Empire {
         }
     }
 
+    /** Adds a Town Hall; the first one (or replacement after loss) becomes primary. */
+    public void addTownHall(TownHall hall) {
+        if (hall == null) {
+            return;
+        }
+        if (!buildings.contains(hall)) {
+            buildings.add(hall);
+        }
+        if (townHall == null) {
+            townHall = hall;
+        }
+    }
+
+    /** After a Town Hall is destroyed, promote another remaining one or clear primary. */
+    public void forgetTownHall(TownHall fallen) {
+        buildings.remove(fallen);
+        if (townHall == fallen) {
+            townHall = null;
+            for (Building building : buildings) {
+                if (building instanceof TownHall && !building.isDestroyed()) {
+                    townHall = (TownHall) building;
+                    break;
+                }
+            }
+        }
+    }
+
     public void raiseUnitCap(int by) {
         unitCap += by;
     }
@@ -79,7 +106,7 @@ public class Empire {
         if (tech.getRequired() != null && !hasTech(tech.getRequired())) {
             return false;
         }
-        if (townHall != null && tech.getRequiredLevel() > townHall.getLevel()) {
+        if (townHall == null || tech.getRequiredLevel() > townHall.getLevel()) {
             return false;
         }
         return stock.canPay(tech.getWoodCost(), tech.getStoneCost(), tech.getIronCost());
@@ -99,8 +126,11 @@ public class Empire {
         return n;
     }
 
-    /** Follows Town Hall level (5 / 10 / 15). Level 1 until upgrades exist. */
+    /** Follows Town Hall level (5 / 10 / 15). Safe if the primary hall is gone. */
     public int getMilitaryCap() {
+        if (townHall == null) {
+            return 0;
+        }
         return 5 * townHall.getLevel();
     }
 

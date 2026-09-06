@@ -6,23 +6,32 @@ import java.util.List;
 
 public class TurnEngine {
 
+    /**
+     * Ends the current player's turn (production/upkeep for their empire),
+     * hands control to the next player, and on a full round wrap runs tribes
+     * plus TURN_ENDED (season/disasters).
+     */
     public void endTurn(Game game) {
-        Empire empire = game.getEmpire();
+        Player acting = game.getCurrentPlayer();
+        Empire empire = acting.getEmpire();
+        int turnBefore = game.getTurn();
 
         produceResources(game, empire);
         advanceTownHallQueue(game, empire);
         payUpkeep(game, empire);
         eatFood(game, empire);
-        checkStarvation(game, empire);
+        checkStarvation(game, acting);
 
-        game.nextTurn();
-        refreshUnits(game, empire);
+        refreshUnits(game, empire, acting.isStarving());
         game.getTradeTracker().clearTurn();
-        game.runTribeTurns();
 
-        // Future systems (seasons, disasters, autosave) subscribe here.
-        // Do not call them from this class — that would invert the dependency.
-        game.getBus().publish(GameEvent.TURN_ENDED, game);
+        game.advanceTurn();
+
+        // Full round finished when advanceTurn wrapped and incremented the turn counter.
+        if (game.getTurn() > turnBefore) {
+            game.runTribeTurns();
+            game.getBus().publish(GameEvent.TURN_ENDED, game);
+        }
     }
 
     private void produceResources(Game game, Empire empire) {
@@ -80,7 +89,16 @@ public class TurnEngine {
     }
 
     private void advanceTownHallQueue(Game game, Empire empire) {
-        empire.getTownHall().tick(game);
+        TownHall hall = empire.getTownHall();
+        if (hall != null) {
+            hall.tick(game);
+        }
+        // Also tick any additional town halls' queues if present
+        for (Building building : empire.getBuildings()) {
+            if (building instanceof TownHall && building != hall) {
+                ((TownHall) building).tick(game);
+            }
+        }
     }
 
     private void payUpkeep(Game game, Empire empire) {
@@ -121,16 +139,16 @@ public class TurnEngine {
         empire.getStock().add(ResourceType.FOOD, -eaten);
     }
 
-    private void checkStarvation(Game game, Empire empire) {
-        boolean starving = empire.getStock().get(ResourceType.FOOD) < 0;
-        if (starving && !game.isStarving()) {
+    private void checkStarvation(Game game, Player player) {
+        boolean starving = player.getEmpire().getStock().get(ResourceType.FOOD) < 0;
+        if (starving && !player.isStarving()) {
             game.addLog("STARVATION! Units are weakened.");
         }
-        game.setStarving(starving);
+        player.setStarving(starving);
     }
 
-    private void refreshUnits(Game game, Empire empire) {
-        int penalty = game.isStarving() ? 1 : 0;
+    private void refreshUnits(Game game, Empire empire, boolean starving) {
+        int penalty = starving ? 1 : 0;
         penalty += empire.getHappiness().apPenalty();
         for (Unit unit : empire.getUnits()) {
             unit.refresh(penalty);

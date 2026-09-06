@@ -64,6 +64,20 @@ public class MainWindow extends JFrame {
         openGame(game);
     }
 
+    /** Offline 2-player hot-seat on the Crossroads designed map. */
+    public void startHotseatGame() {
+        try {
+            civ.model.map.MapPreset map = civ.model.map.MapCatalog.crossroads();
+            java.util.List<String> names = java.util.List.of("Player 1", "Player 2");
+            Game game = new Game(System.currentTimeMillis(), names, map);
+            saveController.wireAutosave(game);
+            openGame(game);
+        } catch (java.io.IOException ex) {
+            javax.swing.JOptionPane.showMessageDialog(this,
+                    "Could not load the Crossroads map: " + ex.getMessage());
+        }
+    }
+
     public void openGame(Game game) {
         if (gameScreen != null) {
             root.remove(gameScreen);

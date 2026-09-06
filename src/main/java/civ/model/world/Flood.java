@@ -83,7 +83,7 @@ public class Flood implements Disaster {
 
         boolean visible = false;
         for (Hex hex : affected) {
-            if (hex.isDiscovered()) {
+            if (game.isDiscovered(game.getCurrentPlayer(), hex)) {
                 visible = true;
                 break;
             }

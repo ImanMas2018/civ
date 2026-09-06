@@ -27,16 +27,18 @@ import civ.model.tribe.TribeTurnBehaviour;
 import civ.model.tribe.TribeType;
 import civ.model.world.DisasterEffect;
 import civ.model.world.DisasterRoller;
+import civ.model.map.MapPreset;
 import civ.model.world.Season;
 import civ.util.HexGeometry;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-public class Game {
+public class Game extends Entity {
 
     private final GameMap map;
-    private final Empire empire = new Empire();
+    private final List<Player> players = new ArrayList<>();
+    private int currentPlayerIndex = 0;
     private final EventBus bus = new EventBus();
     private final UnitFactory unitFactory = new UnitFactory(this);
     private final BuildingFactory buildingFactory = new BuildingFactory(bus);
@@ -55,7 +57,6 @@ public class Game {
     private int turn = 1;
     private Unit selected;
     private Hex inspected;
-    private boolean starving = false;
     private boolean nextDockHalfPrice = false;
     private final List<String> log = new ArrayList<>();
     private Season lastSeason = Season.SPRING;
@@ -69,11 +70,17 @@ public class Game {
     private BattleReport pendingReport;
     private Tribe pendingAttackedTribe;
 
+    /** Late-game cost to found a Town Hall outside your borders. */
+    public static final int FOUND_WOOD = 200;
+    public static final int FOUND_STONE = 150;
+    public static final int FOUND_IRON = 80;
+    public static final int FOUND_FOOD = 100;
+
     public Game(long seed) {
         this(seed, false);
     }
 
-    /** {@code blank} skips starting units/tribes so a save can rebuild the world. */
+    /** Single-player: procedural map, one BLUE "Player 1". {@code blank} for save loads. */
     public Game(long seed, boolean blank) {
         this.mapSeed = seed;
         this.map = new GameMap(22, 18);
@@ -83,10 +90,41 @@ public class Game {
         this.battle = new Battle(new Dice(random));
         this.disasterRoller = new DisasterRoller(random);
 
+        Player player = new Player("Player 1", PlayerColour.BLUE, map);
+        players.add(player);
+
         new MapGenerator(seed).fill(map, centreCol, centreRow);
         if (!blank) {
-            setUpStartingPosition();
+            setUpStartingPosition(player, centreCol, centreRow);
+            spawnHostilesNear(centreCol, centreRow);
+            placeTradingPostNear(centreCol, centreRow);
+            tribes.addAll(new TribePlacer(random).place(this, centreCol, centreRow));
         }
+        wireWorldSystems();
+    }
+
+    /** Multiplayer hot-seat / designed-map game. */
+    public Game(long seed, List<String> playerNames, MapPreset preset) {
+        this.mapSeed = seed;
+        this.map = preset.build();
+        this.centreCol = map.getCols() / 2;
+        this.centreRow = map.getRows() / 2;
+        this.random = new Random(seed);
+        this.battle = new Battle(new Dice(random));
+        this.disasterRoller = new DisasterRoller(random);
+
+        int count = Math.min(playerNames.size(), preset.getMaxPlayers());
+        for (int i = 0; i < count; i++) {
+            Player player = new Player(playerNames.get(i), PlayerColour.forIndex(i), map);
+            players.add(player);
+            int[] spawn = preset.spawnFor(i);
+            setUpStartingPosition(player, spawn[0], spawn[1]);
+        }
+
+        int[] first = preset.spawnFor(0);
+        spawnHostilesNear(first[0], first[1]);
+        placeTradingPostNear(centreCol, centreRow);
+        tribes.addAll(new TribePlacer(random).place(this, centreCol, centreRow));
         wireWorldSystems();
     }
 
@@ -112,9 +150,11 @@ public class Game {
     }
 
     public void clearForLoad() {
-        empire.getUnits().clear();
-        empire.getBuildings().clear();
-        empire.setTownHall(null);
+        for (Player player : players) {
+            player.getEmpire().getUnits().clear();
+            player.getEmpire().getBuildings().clear();
+            player.getEmpire().setTownHall(null);
+        }
         hostiles.clear();
         tribes.clear();
         selected = null;
@@ -130,6 +170,7 @@ public class Game {
                 Hex hex = map.get(col, row);
                 if (hex != null) {
                     hex.setBuilding(null);
+                    hex.setReserved(false);
                 }
             }
         }
@@ -142,19 +183,27 @@ public class Game {
     private void wireWorldSystems() {
         bus.subscribe(GameEvent.BUILDING_PLACED, payload -> {
             Building building = (Building) payload;
-            if (building.getType() == BuildingType.MONUMENT) {
-                empire.getHappiness().add(2);
-            } else if (building.getType() == BuildingType.SETTLEMENT) {
-                empire.getHappiness().add(-1);
+            Empire ownerEmpire = getEmpire(building.getOwnerId());
+            if (ownerEmpire == null) {
+                ownerEmpire = getEmpire();
             }
-            syncGarrisonHappiness();
+            if (building.getType() == BuildingType.MONUMENT) {
+                ownerEmpire.getHappiness().add(2);
+            } else if (building.getType() == BuildingType.SETTLEMENT) {
+                ownerEmpire.getHappiness().add(-1);
+            }
+            syncGarrisonHappiness(ownerEmpire);
         });
         bus.subscribe(GameEvent.BUILDING_DESTROYED, payload -> {
             Building building = (Building) payload;
-            if (building.getType() == BuildingType.MONUMENT) {
-                empire.getHappiness().add(-2);
+            Empire ownerEmpire = getEmpire(building.getOwnerId());
+            if (ownerEmpire == null) {
+                ownerEmpire = getEmpire();
             }
-            syncGarrisonHappiness();
+            if (building.getType() == BuildingType.MONUMENT) {
+                ownerEmpire.getHappiness().add(-2);
+            }
+            syncGarrisonHappiness(ownerEmpire);
         });
         bus.subscribe(GameEvent.TURN_ENDED, payload -> {
             Season now = Season.forTurn(turn);
@@ -163,39 +212,40 @@ public class Game {
                 bus.publish(GameEvent.SEASON_CHANGED, now);
                 addLog("Season changed to " + now.getLabel() + ".");
             }
-            syncGarrisonHappiness();
+            for (Player player : players) {
+                if (player.isAlive()) {
+                    syncGarrisonHappiness(player.getEmpire());
+                }
+            }
             disasterRoller.maybeStrike(this);
             runBearBehaviour();
         });
     }
 
-    private void setUpStartingPosition() {
-        Hex centre = map.get(centreCol, centreRow);
+    private void setUpStartingPosition(Player player, int spawnCol, int spawnRow) {
+        Hex centre = map.get(spawnCol, spawnRow);
+        Empire empire = player.getEmpire();
 
         TownHall townHall = new TownHall(centre);
+        townHall.setOwnerId(player.getId());
         centre.setBuilding(townHall);
         empire.setTownHall(townHall);
 
-        centre.setOwned(true);
-        centre.setDiscovered(true);
+        claimFor(player, centre);
         List<Hex> ring = map.neighbours(centre);
         for (Hex neighbour : ring) {
-            neighbour.setOwned(true);
-            neighbour.setDiscovered(true);
+            claimFor(player, neighbour);
         }
 
-        addUnit(new Explorer(centreCol, centreRow));
-        addUnit(new Builder(ring.get(0).getCol(), ring.get(0).getRow()));
-        addUnit(new Builder(ring.get(1).getCol(), ring.get(1).getRow()));
-        addUnit(new Worker(ring.get(2).getCol(), ring.get(2).getRow()));
-        addUnit(new Worker(ring.get(3).getCol(), ring.get(3).getRow()));
+        addUnitFor(player, new Explorer(spawnCol, spawnRow));
+        addUnitFor(player, new Builder(ring.get(0).getCol(), ring.get(0).getRow()));
+        addUnitFor(player, new Builder(ring.get(1).getCol(), ring.get(1).getRow()));
+        addUnitFor(player, new Worker(ring.get(2).getCol(), ring.get(2).getRow()));
+        addUnitFor(player, new Worker(ring.get(3).getCol(), ring.get(3).getRow()));
         if (ring.size() > 4) {
-            addUnit(new Swordsman(ring.get(4).getCol(), ring.get(4).getRow()));
-            addUnit(new Archer(ring.get(4).getCol(), ring.get(4).getRow()));
+            addUnitFor(player, new Swordsman(ring.get(4).getCol(), ring.get(4).getRow()));
+            addUnitFor(player, new Archer(ring.get(4).getCol(), ring.get(4).getRow()));
         }
-        spawnHostiles();
-        placeTradingPost();
-        tribes.addAll(new TribePlacer(random).place(map, centreCol, centreRow));
 
         empire.getStock().add(ResourceType.FOOD, 80);
         empire.getStock().add(ResourceType.WOOD, 60);
@@ -204,17 +254,30 @@ public class Game {
     }
 
     public void addUnit(Unit unit) {
+        addUnitFor(getCurrentPlayer(), unit);
+    }
+
+    public void addUnitFor(Player player, Unit unit) {
+        unit.setOwnerId(player.getId());
+        Empire empire = player.getEmpire();
         empire.getUnits().add(unit);
-        revealAround(unit);
+        revealAround(player, unit);
         if (unit.isMilitary() && empire.countMilitary() >= empire.getMilitaryCap()) {
             empire.getHappiness().noteMilitaryCapReached();
             addLog("Military unit cap reached: −1 happiness.");
         }
-        syncGarrisonHappiness();
+        syncGarrisonHappiness(empire);
     }
 
     public void removeUnit(Unit unit) {
-        empire.getUnits().remove(unit);
+        Player owner = getPlayer(unit.getOwnerId());
+        if (owner != null) {
+            owner.getEmpire().getUnits().remove(unit);
+        } else {
+            for (Player player : players) {
+                player.getEmpire().getUnits().remove(unit);
+            }
+        }
         if (selected == unit) {
             selected = null;
         }
@@ -318,8 +381,126 @@ public class Game {
         return map;
     }
 
+    /** Compat: current player's empire. */
     public Empire getEmpire() {
-        return empire;
+        return getCurrentPlayer().getEmpire();
+    }
+
+    public Empire getEmpire(Player player) {
+        return player == null ? null : player.getEmpire();
+    }
+
+    public Empire getEmpire(long playerId) {
+        Player player = getPlayer(playerId);
+        return player == null ? null : player.getEmpire();
+    }
+
+    public List<Player> getPlayers() {
+        return players;
+    }
+
+    public Player getCurrentPlayer() {
+        return players.get(currentPlayerIndex);
+    }
+
+    public int getCurrentPlayerIndex() {
+        return currentPlayerIndex;
+    }
+
+    public void setCurrentPlayerIndex(int index) {
+        currentPlayerIndex = Math.max(0, Math.min(index, players.size() - 1));
+    }
+
+    public Player getPlayer(long id) {
+        for (Player player : players) {
+            if (player.getId() == id) {
+                return player;
+            }
+        }
+        return null;
+    }
+
+    public boolean isTurnOf(Player player) {
+        return player != null && getCurrentPlayer().getId() == player.getId();
+    }
+
+    /** Skips eliminated and disconnected players so the game never stalls. */
+    public void advanceTurn() {
+        int previous = currentPlayerIndex;
+        for (int step = 1; step <= players.size(); step++) {
+            int next = (previous + step) % players.size();
+            Player candidate = players.get(next);
+            if (candidate.isAlive() && candidate.isConnected()) {
+                currentPlayerIndex = next;
+                if (next <= previous) {
+                    turn++;
+                }
+                return;
+            }
+        }
+    }
+
+    public boolean owns(Player player, Unit unit) {
+        return player != null && unit != null && unit.getOwnerId() == player.getId();
+    }
+
+    public boolean owns(Player player, Building building) {
+        return player != null && building != null && building.getOwnerId() == player.getId();
+    }
+
+    public boolean isDiscovered(Player player, Hex hex) {
+        return player != null && hex != null && player.getFog().isDiscovered(hex);
+    }
+
+    public boolean isOwned(Player player, Hex hex) {
+        return player != null && hex != null && player.getFog().isOwned(hex);
+    }
+
+    public Player ownerOf(Hex hex) {
+        if (hex == null) {
+            return null;
+        }
+        for (Player player : players) {
+            if (player.isAlive() && player.getFog().isOwned(hex)) {
+                return player;
+            }
+        }
+        return null;
+    }
+
+    public boolean isClaimed(Hex hex) {
+        return hex != null && (hex.isReserved() || ownerOf(hex) != null);
+    }
+
+    public void claimFor(Player player, Hex hex) {
+        if (player == null || hex == null) {
+            return;
+        }
+        Player previous = ownerOf(hex);
+        if (previous != null && previous.getId() != player.getId()) {
+            previous.getFog().release(hex);
+        }
+        hex.setReserved(false);
+        player.getFog().claim(hex);
+    }
+
+    public void revealAround(Player player, Unit unit) {
+        if (player == null || unit == null) {
+            return;
+        }
+        Hex centre = hexOf(unit);
+        if (centre == null) {
+            return;
+        }
+        for (Hex hex : map.withinRange(centre, unit.getVisionRadius())) {
+            player.getFog().discover(hex);
+            Tribe tribe = tribeAt(hex);
+            if (tribe != null && !tribe.isDiscovered()) {
+                tribe.discover();
+                addLog("Discovered the " + tribe.getName()
+                        + " (" + tribe.getType().getLabel() + ").");
+            }
+        }
     }
 
     public EventBus getBus() {
@@ -351,11 +532,21 @@ public class Game {
     }
 
     public boolean isStarving() {
-        return starving;
+        return getCurrentPlayer().isStarving();
     }
 
     public void setStarving(boolean starving) {
-        this.starving = starving;
+        getCurrentPlayer().setStarving(starving);
+    }
+
+    public boolean isStarving(Player player) {
+        return player != null && player.isStarving();
+    }
+
+    public void setStarving(Player player, boolean starving) {
+        if (player != null) {
+            player.setStarving(starving);
+        }
     }
 
     public List<String> getLog() {
@@ -366,8 +557,19 @@ public class Game {
         log.add("Turn " + turn + ": " + message);
     }
 
+    /** Current player's living units. */
     public List<Unit> getUnits() {
-        return empire.getUnits();
+        return getEmpire().getUnits();
+    }
+
+    public List<Unit> getAllUnits() {
+        List<Unit> all = new ArrayList<>();
+        for (Player player : players) {
+            if (player.isAlive()) {
+                all.addAll(player.getEmpire().getUnits());
+            }
+        }
+        return all;
     }
 
     public Unit getSelected() {
@@ -375,6 +577,9 @@ public class Game {
     }
 
     public void select(Unit unit) {
+        if (unit != null && !owns(getCurrentPlayer(), unit)) {
+            return;
+        }
         selected = unit;
     }
 
@@ -396,7 +601,7 @@ public class Game {
         if (!hex.getTerrain().isPassable()) {
             text.append(" — impassable");
         } else if (hex.getTerrain().isSea()) {
-            text.append(empire.hasTech(Tech.SEAFARING)
+            text.append(getEmpire().hasTech(Tech.SEAFARING)
                     ? " — enter with Seafaring (AP to 0)"
                     : " — needs Seafaring");
         } else {
@@ -438,7 +643,7 @@ public class Game {
                     .append(" (").append(tribe.getState().getName())
                     .append(", ").append(tribe.getRelation()).append(")");
         }
-        boolean buildable = hex.getTerrain().isLand() && hex.isOwned() && hex.getBuilding() == null;
+        boolean buildable = hex.getTerrain().isLand() && isOwned(getCurrentPlayer(), hex) && hex.getBuilding() == null;
         text.append(buildable ? ". Can build here." : ". Cannot build here.");
         return text.toString();
     }
@@ -495,7 +700,7 @@ public class Game {
 
     public List<Unit> unitsAt(Hex hex) {
         List<Unit> result = new ArrayList<>();
-        for (Unit unit : empire.getUnits()) {
+        for (Unit unit : getAllUnits()) {
             if (unit.isOn(hex)) {
                 result.add(unit);
             }
@@ -524,6 +729,9 @@ public class Game {
         if (unit == null || target == null) {
             return false;
         }
+        if (!owns(getCurrentPlayer(), unit)) {
+            return false;
+        }
         if (unit.isBusy()) {
             return false;
         }
@@ -541,7 +749,7 @@ public class Game {
             return false;
         }
         if (target.getTerrain().isSea()) {
-            return empire.hasTech(Tech.SEAFARING) && unit.getAp() > 0;
+            return getEmpire().hasTech(Tech.SEAFARING) && unit.getAp() > 0;
         }
         if (!hostilesAt(target).isEmpty()) {
             return false;
@@ -556,13 +764,16 @@ public class Game {
         if (builder == null || hex == null) {
             return false;
         }
+        if (!owns(getCurrentPlayer(), builder)) {
+            return false;
+        }
         if (!builder.hasCharge()) {
             return false;
         }
         if (!builder.isOn(hex)) {
             return false;
         }
-        if (!hex.isOwned()) {
+        if (!isOwned(getCurrentPlayer(), hex)) {
             return false;
         }
         if (!hex.getTerrain().isLand()) {
@@ -585,10 +796,11 @@ public class Game {
         if (!builder.canSpend(type.getApCost())) {
             return false;
         }
-        if (type.getRequiredTech() != null && !empire.hasTech(type.getRequiredTech())) {
+        if (type.getRequiredTech() != null && !getEmpire().hasTech(type.getRequiredTech())) {
             return false;
         }
-        if (type.getRequiredLevel() > empire.getTownHall().getLevel()) {
+        if (getEmpire().getTownHall() == null
+                || type.getRequiredLevel() > getEmpire().getTownHall().getLevel()) {
             return false;
         }
         if (type.getRequiredTerrain() != null && hex.getTerrain() != type.getRequiredTerrain()) {
@@ -603,7 +815,7 @@ public class Game {
                 return false;
             }
         }
-        return empire.getStock().canPay(woodCost, type.getStoneCost(), type.getIronCost());
+        return getEmpire().getStock().canPay(woodCost, type.getStoneCost(), type.getIronCost());
     }
 
     public boolean canStation(Worker worker) {
@@ -629,33 +841,36 @@ public class Game {
         if (expander == null || hex == null) {
             return false;
         }
-        return hex.isDiscovered();
+        return isDiscovered(getCurrentPlayer(), hex);
     }
 
     public boolean canTrain(UnitBlueprint blueprint) {
-        if (empire.getTownHall().isBusy()) {
+        TownHall hall = getEmpire().getTownHall();
+        if (hall == null || hall.isBusy()) {
             return false;
         }
         return unitFactory.canCreate(blueprint);
     }
 
     public boolean canResearch(Tech tech) {
-        return !empire.getTownHall().isBusy() && empire.canResearch(tech);
+        TownHall hall = getEmpire().getTownHall();
+        return hall != null && !hall.isBusy() && getEmpire().canResearch(tech);
     }
 
     public boolean canUpgradeTownHall() {
-        if (empire.getTownHall().isBusy()) {
+        TownHall hall = getEmpire().getTownHall();
+        if (hall == null || hall.isBusy()) {
             return false;
         }
-        TownHallLevel next = empire.getTownHall().getRank().next();
+        TownHallLevel next = hall.getRank().next();
         if (next == null) {
             return false;
         }
-        return empire.getStock().canPay(next.getWoodCost(), next.getStoneCost(), next.getIronCost());
+        return getEmpire().getStock().canPay(next.getWoodCost(), next.getStoneCost(), next.getIronCost());
     }
 
     public boolean hasIdleUnitWithAp() {
-        for (Unit unit : empire.getUnits()) {
+        for (Unit unit : getEmpire().getUnits()) {
             if (!unit.isBusy() && unit.getAp() > 0) {
                 return true;
             }
@@ -667,17 +882,21 @@ public class Game {
         if (!canMove(unit, target)) {
             return;
         }
+        Player owner = getPlayer(unit.getOwnerId());
+        if (owner == null) {
+            owner = getCurrentPlayer();
+        }
         if (target.getTerrain().isSea()) {
             unit.moveTo(target);
             unit.emptyAp();
-            revealAround(unit);
-            syncGarrisonHappiness();
+            revealAround(owner, unit);
+            syncGarrisonHappiness(owner.getEmpire());
             return;
         }
         unit.spend(moveCost(unit, target));
         unit.moveTo(target);
-        revealAround(unit);
-        syncGarrisonHappiness();
+        revealAround(owner, unit);
+        syncGarrisonHappiness(owner.getEmpire());
     }
 
     public void build(Builder builder, BuildingType type, Hex hex) {
@@ -689,14 +908,15 @@ public class Game {
         if (type == BuildingType.DOCK && nextDockHalfPrice) {
             woodCost = woodCost / 2;
         }
-        empire.getStock().pay(woodCost, type.getStoneCost(), type.getIronCost());
+        getEmpire().getStock().pay(woodCost, type.getStoneCost(), type.getIronCost());
         builder.spend(type.getApCost());
 
         Building building = buildingFactory.create(type, hex);
-        empire.getBuildings().add(building);
+        building.setOwnerId(getCurrentPlayer().getId());
+        getEmpire().getBuildings().add(building);
 
         if (type == BuildingType.SETTLEMENT) {
-            empire.raiseUnitCap(5);
+            getEmpire().raiseUnitCap(5);
         }
         if (type == BuildingType.DOCK && nextDockHalfPrice) {
             nextDockHalfPrice = false;
@@ -714,17 +934,17 @@ public class Game {
         if (builder == null || hex == null) {
             return false;
         }
-        if (!hex.isOwned() || !hex.getTerrain().isLand() || hex.hasRoad()) {
+        if (!isOwned(getCurrentPlayer(), hex) || !hex.getTerrain().isLand() || hex.hasRoad()) {
             return false;
         }
-        return builder.canSpend(1) && empire.getStock().canPay(ResourceType.WOOD, 8);
+        return builder.canSpend(1) && getEmpire().getStock().canPay(ResourceType.WOOD, 8);
     }
 
     public void buildRoad(Builder builder) {
         if (!canBuildRoad(builder)) {
             return;
         }
-        empire.getStock().add(ResourceType.WOOD, -8);
+        getEmpire().getStock().add(ResourceType.WOOD, -8);
         builder.spend(1);
         hexOf(builder).setRoad(true);
         addLog("A road was built.");
@@ -738,10 +958,11 @@ public class Game {
         if (HexGeometry.distance(here.getCol(), here.getRow(), other.getCol(), other.getRow()) != 1) {
             return false;
         }
-        if (!here.isDiscovered() || !other.isDiscovered()) {
+        Player me = getCurrentPlayer();
+        if (!isDiscovered(me, here) || !isDiscovered(me, other)) {
             return false;
         }
-        if (!here.isOwned() && !other.isOwned()) {
+        if (!isOwned(me, here) && !isOwned(me, other)) {
             return false;
         }
         if (here.getTerrain().isSea() || here.getTerrain().isMountainRange()
@@ -753,14 +974,14 @@ public class Game {
             return false;
         }
         return builder.canSpend(1)
-                && empire.getStock().canPay(15, 20, 0);
+                && getEmpire().getStock().canPay(15, 20, 0);
     }
 
     public void buildWall(Builder builder, Hex other) {
         if (!canBuildWall(builder, other)) {
             return;
         }
-        empire.getStock().pay(15, 20, 0);
+        getEmpire().getStock().pay(15, 20, 0);
         builder.spend(1);
         map.getEdges().getOrCreate(hexOf(builder), other).setWall(new Wall());
         addLog("A wall was raised.");
@@ -786,7 +1007,7 @@ public class Game {
                 || building.getType() == BuildingType.TRADING_POST)) {
             return false;
         }
-        boolean hasBuilding = building != null && hex.isOwned();
+        boolean hasBuilding = building != null && isOwned(getCurrentPlayer(), hex);
         return hasBuilding || hex.hasRoad();
     }
 
@@ -850,11 +1071,10 @@ public class Game {
         if (!canExpandBorder(expander, hex)) {
             return;
         }
-        hex.setOwned(true);
-        hex.setDiscovered(true);
+        Player me = getCurrentPlayer();
+        claimFor(me, hex);
         for (Hex neighbour : map.neighbours(hex)) {
-            neighbour.setOwned(true);
-            neighbour.setDiscovered(true);
+            claimFor(me, neighbour);
         }
         removeUnit(expander);
         addLog("The border was expanded and the Border Expander was consumed.");
@@ -864,30 +1084,30 @@ public class Game {
         if (!canTrain(blueprint)) {
             return;
         }
-        empire.getTownHall().start(new TrainUnitCommand(blueprint), this);
+        getEmpire().getTownHall().start(new TrainUnitCommand(blueprint), this);
     }
 
     public void research(Tech tech) {
         if (!canResearch(tech)) {
             return;
         }
-        empire.getTownHall().start(new ResearchTechCommand(tech), this);
+        getEmpire().getTownHall().start(new ResearchTechCommand(tech), this);
     }
 
     public void upgradeTownHall() {
         if (!canUpgradeTownHall()) {
             return;
         }
-        TownHallLevel next = empire.getTownHall().getRank().next();
-        empire.getTownHall().start(new UpgradeTownHallCommand(next), this);
+        TownHallLevel next = getEmpire().getTownHall().getRank().next();
+        getEmpire().getTownHall().start(new UpgradeTownHallCommand(next), this);
     }
 
     public void cancelTownHallOrder() {
-        empire.getTownHall().cancelCommand(this);
+        getEmpire().getTownHall().cancelCommand(this);
     }
 
     public boolean hasMilitaryStable() {
-        for (Building building : empire.getBuildings()) {
+        for (Building building : getEmpire().getBuildings()) {
             if (building.getType() == BuildingType.MILITARY_STABLE) {
                 return true;
             }
@@ -896,10 +1116,14 @@ public class Game {
     }
 
     public Hex spawnHexFor(UnitBlueprint blueprint) {
-        Hex home = empire.getTownHall().getHex();
+        TownHall hall = getEmpire().getTownHall();
+        if (hall == null) {
+            return null;
+        }
+        Hex home = hall.getHex();
         Unit probe = blueprint.create(home.getCol(), home.getRow());
         for (Hex hex : map.withinRange(home, 2)) {
-            if (!hex.isOwned() || !hex.getTerrain().isLand()) {
+            if (!isOwned(getCurrentPlayer(), hex) || !hex.getTerrain().isLand()) {
                 continue;
             }
             if (!hostilesAt(hex).isEmpty()) {
@@ -965,7 +1189,7 @@ public class Game {
 
     public List<MilitaryUnit> playerMilitaryNear(Hex centre, int radius) {
         List<MilitaryUnit> result = new ArrayList<>();
-        for (Unit unit : empire.getUnits()) {
+        for (Unit unit : getAllUnits()) {
             if (!(unit instanceof MilitaryUnit)) {
                 continue;
             }
@@ -1032,7 +1256,7 @@ public class Game {
         if (from == null || to == null || from == to) {
             return false;
         }
-        if (!to.isDiscovered()) {
+        if (!isDiscovered(getCurrentPlayer(), to)) {
             return false;
         }
         int distance = HexGeometry.distance(
@@ -1131,8 +1355,7 @@ public class Game {
             unit.spend(1);
         }
         if (canCapture(to)) {
-            to.setOwned(true);
-            to.setDiscovered(true);
+            claimFor(getCurrentPlayer(), to);
             addLog("The hex was captured without a fight.");
             return;
         }
@@ -1143,7 +1366,7 @@ public class Game {
             return;
         }
         Building building = to.getBuilding();
-        if (building != null && !empire.getBuildings().contains(building)) {
+        if (building != null && !owns(getCurrentPlayer(), building)) {
             strikeBuilding(building, battle.damageToStructure(attackers));
         }
     }
@@ -1168,16 +1391,16 @@ public class Game {
         }
     }
 
-    private void spawnHostiles() {
+    private void spawnHostilesNear(int originCol, int originRow) {
         Hex barbHex = null;
         Hex animalHex = null;
         for (int col = 0; col < map.getCols(); col++) {
             for (int row = 0; row < map.getRows(); row++) {
                 Hex hex = map.get(col, row);
-                if (hex == null || !hex.getTerrain().isLand() || hex.isOwned()) {
+                if (hex == null || !hex.getTerrain().isLand() || isClaimed(hex)) {
                     continue;
                 }
-                int distance = HexGeometry.distance(centreCol, centreRow, col, row);
+                int distance = HexGeometry.distance(originCol, originRow, col, row);
                 if (distance != 2) {
                     continue;
                 }
@@ -1189,19 +1412,19 @@ public class Game {
             }
         }
         if (barbHex != null) {
-            barbHex.setDiscovered(true);
+            getCurrentPlayer().getFog().discover(barbHex);
             addHostile(new Barbarian(barbHex.getCol(), barbHex.getRow()));
             addHostile(new Barbarian(barbHex.getCol(), barbHex.getRow()));
             addLog("Raiders were spotted nearby.");
         }
         if (animalHex != null) {
-            animalHex.setDiscovered(true);
+            getCurrentPlayer().getFog().discover(animalHex);
             addHostile(new WildAnimal(animalHex.getCol(), animalHex.getRow()));
         }
     }
 
     private boolean canCapture(Hex to) {
-        if (to.isOwned() || to.getBuilding() != null) {
+        if (isClaimed(to) || to.getBuilding() != null) {
             return false;
         }
         if (!to.getTerrain().isLand()) {
@@ -1212,7 +1435,7 @@ public class Game {
 
     private boolean canStrikeStructure(Hex to) {
         Building building = to.getBuilding();
-        if (building == null || empire.getBuildings().contains(building)) {
+        if (building == null || owns(getCurrentPlayer(), building)) {
             return false;
         }
         if (building instanceof TribeCamp) {
@@ -1326,6 +1549,16 @@ public class Game {
         }
         if (building instanceof TownHall) {
             addLog("The Town Hall has fallen to 0 HP!");
+            Player owner = getPlayer(building.getOwnerId());
+            Empire empire = owner != null ? owner.getEmpire() : null;
+            if (empire != null) {
+                empire.forgetTownHall((TownHall) building);
+            }
+            building.getHex().setBuilding(null);
+            if (owner != null) {
+                checkElimination(owner);
+            }
+            bus.publish(GameEvent.BUILDING_DESTROYED, building);
             return;
         }
         if (building instanceof TribeCamp) {
@@ -1341,21 +1574,33 @@ public class Game {
             ((ProductionBuilding) building).releaseAllWorkers();
         }
         building.getHex().setBuilding(null);
-        empire.getBuildings().remove(building);
+        Player owner = getPlayer(building.getOwnerId());
+        if (owner != null) {
+            Empire empire = owner.getEmpire();
+            if (building instanceof TownHall) {
+                empire.forgetTownHall((TownHall) building);
+            } else {
+                empire.getBuildings().remove(building);
+            }
+        } else {
+            for (Player player : players) {
+                player.getEmpire().getBuildings().remove(building);
+            }
+        }
         bus.publish(GameEvent.BUILDING_DESTROYED, building);
     }
 
-    private void placeTradingPost() {
+    private void placeTradingPostNear(int originCol, int originRow) {
         for (int col = 0; col < map.getCols(); col++) {
             for (int row = 0; row < map.getRows(); row++) {
                 Hex hex = map.get(col, row);
-                if (hex == null || !hex.getTerrain().isLand() || hex.isOwned()) {
+                if (hex == null || !hex.getTerrain().isLand() || isClaimed(hex)) {
                     continue;
                 }
                 if (hex.getBuilding() != null) {
                     continue;
                 }
-                int distance = HexGeometry.distance(centreCol, centreRow, col, row);
+                int distance = HexGeometry.distance(originCol, originRow, col, row);
                 if (distance < 4 || distance > 8) {
                     continue;
                 }
@@ -1385,10 +1630,10 @@ public class Game {
         boolean wasAllied = tribe.isAllied();
         boolean wasFriendly = tribe.getRelation() >= 20 && !wasAllied;
         if (wasAllied) {
-            empire.addHappinessBonus(-15);
+            getEmpire().addHappinessBonus(-15);
             addLog("Attacking an ally: −15 happiness.");
         } else if (wasFriendly) {
-            empire.addHappinessBonus(-5);
+            getEmpire().addHappinessBonus(-5);
             addLog("Attacking a friendly tribe: −5 happiness.");
         }
         if (tribe.getQuest() != null) {
@@ -1422,14 +1667,14 @@ public class Game {
         tribe.markDestroyed();
         camp.setBuilding(null);
         Outpost outpost = new Outpost(camp);
+        outpost.setOwnerId(getCurrentPlayer().getId());
         camp.setBuilding(outpost);
-        empire.getBuildings().add(outpost);
-        camp.setOwned(true);
-        camp.setDiscovered(true);
+        getEmpire().getBuildings().add(outpost);
+        camp.setReserved(false);
+        claimFor(getCurrentPlayer(), camp);
         for (Hex neighbour : map.neighbours(camp)) {
             if (neighbour.getTerrain().isPassable() && neighbour.getTerrain().isLand()) {
-                neighbour.setOwned(true);
-                neighbour.setDiscovered(true);
+                claimFor(getCurrentPlayer(), neighbour);
             }
         }
         bus.publish(GameEvent.BUILDING_DESTROYED, tribe.getCamp());
@@ -1439,23 +1684,23 @@ public class Game {
     private void grantLoot(Tribe tribe) {
         switch (tribe.getType()) {
             case FARMER:
-                empire.getStock().add(ResourceType.FOOD, 40);
+                getEmpire().getStock().add(ResourceType.FOOD, 40);
                 break;
             case MOUNTAIN:
-                empire.getStock().add(ResourceType.STONE, 25);
-                empire.getStock().add(ResourceType.IRON, 15);
+                getEmpire().getStock().add(ResourceType.STONE, 25);
+                getEmpire().getStock().add(ResourceType.IRON, 15);
                 break;
             case TRADER:
-                empire.getStock().add(ResourceType.WOOD, 20);
-                empire.getStock().add(ResourceType.STONE, 20);
-                empire.getStock().add(ResourceType.FOOD, 20);
+                getEmpire().getStock().add(ResourceType.WOOD, 20);
+                getEmpire().getStock().add(ResourceType.STONE, 20);
+                getEmpire().getStock().add(ResourceType.FOOD, 20);
                 break;
             case WARRIOR:
-                empire.getStock().add(ResourceType.IRON, 30);
+                getEmpire().getStock().add(ResourceType.IRON, 30);
                 break;
             case COASTAL:
-                empire.getStock().add(ResourceType.FOOD, 25);
-                empire.getStock().add(ResourceType.WOOD, 25);
+                getEmpire().getStock().add(ResourceType.FOOD, 25);
+                getEmpire().getStock().add(ResourceType.WOOD, 25);
                 break;
             default:
                 break;
@@ -1488,7 +1733,7 @@ public class Game {
         }
         removeUnit(unit);
         addLog(unit.getTypeName() + " was " + reason + ".");
-        syncGarrisonHappiness();
+        syncGarrisonHappiness(getEmpire());
     }
 
     /**
@@ -1497,6 +1742,10 @@ public class Game {
     public int adjustProduction(Building building, int raw) {
         if (building.isPaused(turn)) {
             return 0;
+        }
+        Empire empire = getEmpire(building.getOwnerId());
+        if (empire == null) {
+            empire = getEmpire();
         }
         int amount = raw;
         if (building instanceof ProductionBuilding) {
@@ -1515,6 +1764,13 @@ public class Game {
     }
 
     public void syncGarrisonHappiness() {
+        syncGarrisonHappiness(getEmpire());
+    }
+
+    public void syncGarrisonHappiness(Empire empire) {
+        if (empire == null) {
+            return;
+        }
         TownHall hall = empire.getTownHall();
         if (hall == null) {
             empire.getHappiness().setGarrisonBonus(0);
@@ -1522,7 +1778,7 @@ public class Game {
         }
         int garrison = 0;
         for (Unit unit : unitsAt(hall.getHex())) {
-            if (unit.isMilitary()) {
+            if (unit.isMilitary() && unit.getOwnerId() == hall.getOwnerId()) {
                 garrison++;
             }
         }
@@ -1559,7 +1815,6 @@ public class Game {
                         && hostilesAt(step).isEmpty() && bear.canSpend(1)) {
                     bear.spend(1);
                     bear.moveTo(step);
-                    step.setDiscovered(true);
                 }
                 continue;
             }
@@ -1595,7 +1850,7 @@ public class Game {
     private Unit nearestCivilian(Hex from, int radius) {
         Unit best = null;
         int bestDist = Integer.MAX_VALUE;
-        for (Unit unit : empire.getUnits()) {
+        for (Unit unit : getAllUnits()) {
             if (unit.isMilitary() || unit.isBusy()) {
                 continue;
             }
@@ -1612,7 +1867,7 @@ public class Game {
     private MilitaryUnit nearestPlayerMilitary(Hex from, int radius) {
         MilitaryUnit best = null;
         int bestDist = Integer.MAX_VALUE;
-        for (Unit unit : empire.getUnits()) {
+        for (Unit unit : getAllUnits()) {
             if (!(unit instanceof MilitaryUnit)) {
                 continue;
             }
@@ -1653,14 +1908,14 @@ public class Game {
         if (!tribe.getState().allowsGift()) {
             return;
         }
-        if (!empire.getStock().canPay(type, amount)) {
+        if (!getEmpire().getStock().canPay(type, amount)) {
             return;
         }
         int gain = tribe.giftRelationGain(type, amount);
         if (gain <= 0) {
             return;
         }
-        empire.getStock().add(type, -amount);
+        getEmpire().getStock().add(type, -amount);
         tribe.changeRelation(gain, bus);
         addLog("Gifted " + amount + " " + type.getLabel() + " to " + tribe.getName()
                 + " (+" + gain + " relation).");
@@ -1676,18 +1931,18 @@ public class Game {
     public boolean canAskPeace(Tribe tribe) {
         return tribe != null
                 && tribe.getState().allowsPeaceRequest()
-                && empire.getStock().canPay(ResourceType.FOOD, 30)
-                && empire.getStock().canPay(ResourceType.WOOD, 30)
-                && empire.getStock().canPay(ResourceType.IRON, 30);
+                && getEmpire().getStock().canPay(ResourceType.FOOD, 30)
+                && getEmpire().getStock().canPay(ResourceType.WOOD, 30)
+                && getEmpire().getStock().canPay(ResourceType.IRON, 30);
     }
 
     public void askPeace(Tribe tribe) {
         if (!canAskPeace(tribe)) {
             return;
         }
-        empire.getStock().add(ResourceType.FOOD, -30);
-        empire.getStock().add(ResourceType.WOOD, -30);
-        empire.getStock().add(ResourceType.IRON, -30);
+        getEmpire().getStock().add(ResourceType.FOOD, -30);
+        getEmpire().getStock().add(ResourceType.WOOD, -30);
+        getEmpire().getStock().add(ResourceType.IRON, -30);
         tribe.setRelationAbsolute(-10, bus);
         addLog("Peace with " + tribe.getName() + ". Relation is now −10.");
     }
@@ -1725,7 +1980,7 @@ public class Game {
     }
 
     public boolean hasBazaar() {
-        for (Building building : empire.getBuildings()) {
+        for (Building building : getEmpire().getBuildings()) {
             if (building.getType() == BuildingType.BAZAAR) {
                 return true;
             }
@@ -1737,7 +1992,7 @@ public class Game {
         for (int col = 0; col < map.getCols(); col++) {
             for (int row = 0; row < map.getRows(); row++) {
                 Hex hex = map.get(col, row);
-                if (hex == null || !hex.isOwned()) {
+                if (hex == null || !isOwned(getCurrentPlayer(), hex)) {
                     continue;
                 }
                 if (hex.getBuilding() instanceof TradingPost) {
@@ -1749,18 +2004,112 @@ public class Game {
     }
 
     public void revealAround(Unit unit) {
-        Hex centre = hexOf(unit);
-        if (centre == null) {
+        Player owner = getPlayer(unit.getOwnerId());
+        if (owner == null) {
+            owner = getCurrentPlayer();
+        }
+        revealAround(owner, unit);
+    }
+
+    public boolean canFoundTownHall(Builder builder, Hex hex) {
+        if (builder == null || hex == null) {
+            return false;
+        }
+        Player me = getCurrentPlayer();
+        if (!owns(me, builder) || !builder.isOn(hex) || !builder.hasCharge()) {
+            return false;
+        }
+        if (!hex.getTerrain().isLand() || hex.getBuilding() != null || isClaimed(hex)) {
+            return false;
+        }
+        if (isOwned(me, hex)) {
+            return false; // must be outside borders
+        }
+        if (!builder.canSpend(1)) {
+            return false;
+        }
+        Empire empire = me.getEmpire();
+        return empire.getStock().canPay(ResourceType.WOOD, FOUND_WOOD)
+                && empire.getStock().canPay(ResourceType.STONE, FOUND_STONE)
+                && empire.getStock().canPay(ResourceType.IRON, FOUND_IRON)
+                && empire.getStock().canPay(ResourceType.FOOD, FOUND_FOOD);
+    }
+
+    public void foundTownHall(Builder builder, Hex hex) {
+        if (!canFoundTownHall(builder, hex)) {
             return;
         }
-        for (Hex hex : map.withinRange(centre, unit.getVisionRadius())) {
-            hex.setDiscovered(true);
-            Tribe tribe = tribeAt(hex);
-            if (tribe != null && !tribe.isDiscovered()) {
-                tribe.discover();
-                addLog("Discovered the " + tribe.getName()
-                        + " (" + tribe.getType().getLabel() + ").");
+        Player me = getCurrentPlayer();
+        Empire empire = me.getEmpire();
+        empire.getStock().add(ResourceType.WOOD, -FOUND_WOOD);
+        empire.getStock().add(ResourceType.STONE, -FOUND_STONE);
+        empire.getStock().add(ResourceType.IRON, -FOUND_IRON);
+        empire.getStock().add(ResourceType.FOOD, -FOUND_FOOD);
+        builder.spend(1);
+
+        TownHall hall = new TownHall(hex);
+        hall.setOwnerId(me.getId());
+        hex.setBuilding(hall);
+        empire.addTownHall(hall);
+        claimFor(me, hex);
+        for (Hex neighbour : map.neighbours(hex)) {
+            claimFor(me, neighbour);
+        }
+        bus.publish(GameEvent.BUILDING_PLACED, hall);
+
+        builder.useCharge();
+        if (!builder.hasCharge()) {
+            removeUnit(builder);
+        }
+        addLog(me.getName() + " founded a new Town Hall.");
+    }
+
+    /**
+     * Called after Town Hall damage. Design decision: on elimination we remove
+     * everything the player owns rather than leaving abandoned units on the map.
+     */
+    public void checkElimination(Player player) {
+        if (player == null || !player.isAlive() || player.hasTownHall()) {
+            return;
+        }
+
+        player.eliminate();
+        addLog(player.getName() + " has been eliminated.");
+
+        for (Unit unit : new ArrayList<>(player.getEmpire().getUnits())) {
+            removeUnit(unit);
+        }
+        for (Building building : new ArrayList<>(player.getEmpire().getBuildings())) {
+            Hex hex = building.getHex();
+            if (hex != null) {
+                hex.setBuilding(null);
+                player.getFog().release(hex);
             }
         }
+        // clear ownership fog for remaining claimed hexes
+        for (int col = 0; col < map.getCols(); col++) {
+            for (int row = 0; row < map.getRows(); row++) {
+                Hex hex = map.get(col, row);
+                if (hex != null && player.getFog().isOwned(hex)) {
+                    player.getFog().release(hex);
+                }
+            }
+        }
+        player.getEmpire().getBuildings().clear();
+        player.getEmpire().setTownHall(null);
+        if (selected != null && selected.getOwnerId() == player.getId()) {
+            selected = null;
+        }
+    }
+
+    public Player findWinner() {
+        List<Player> standing = new ArrayList<>();
+        for (Player player : players) {
+            if (player.isAlive() && player.hasTownHall()) {
+                standing.add(player);
+            }
+        }
+        return standing.size() == 1 ? standing.get(0) : null;
     }
 }
+

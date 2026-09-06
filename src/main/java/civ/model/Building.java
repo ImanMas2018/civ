@@ -1,11 +1,12 @@
 package civ.model;
 
-public abstract class Building {
+public abstract class Building extends Entity {
 
     private static final int DEFAULT_HP = 40;
 
     private final BuildingType type;
     private final Hex hex;
+    private long ownerId;
     private int unpaidTurns = 0;
     private int hp = DEFAULT_HP;
     private int maxHp = DEFAULT_HP;
@@ -15,6 +16,20 @@ public abstract class Building {
     protected Building(BuildingType type, Hex hex) {
         this.type = type;
         this.hex = hex;
+    }
+
+    protected Building(long id, long createdAt, BuildingType type, Hex hex) {
+        super(id, createdAt);
+        this.type = type;
+        this.hex = hex;
+    }
+
+    public long getOwnerId() {
+        return ownerId;
+    }
+
+    public void setOwnerId(long ownerId) {
+        this.ownerId = ownerId;
     }
 
     public BuildingType getType() {

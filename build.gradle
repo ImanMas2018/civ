@@ -15,6 +15,15 @@ application {
     mainClass = 'civ.Main'
 }
 
+// ./gradlew runClient  — start as many of these as you like
+tasks.register('runClient', JavaExec) {
+    group = 'application'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'civ.Main'
+    args = ['client']
+    standardInput = System.in
+}
+
 dependencies {
     implementation 'com.google.code.gson:gson:2.10.1'
 }

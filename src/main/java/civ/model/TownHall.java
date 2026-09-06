@@ -99,8 +99,12 @@ public class TownHall extends Building {
         }
         int oldStorage = current.getStorage();
         level = next.getNumber();
-        game.getEmpire().getStock().setCapacity(
-                game.getEmpire().getStock().getCapacity() + (next.getStorage() - oldStorage));
+        Empire empire = game.getEmpire(getOwnerId());
+        if (empire == null) {
+            empire = game.getEmpire();
+        }
+        empire.getStock().setCapacity(
+                empire.getStock().getCapacity() + (next.getStorage() - oldStorage));
         if (next.getHeal() > 0) {
             heal(next.getHeal());
         }

@@ -1,6 +1,6 @@
 package civ.model;
 
-public abstract class Unit {
+public abstract class Unit extends Entity {
 
     private static final int DEFAULT_BODY_HP = 50;
 
@@ -8,6 +8,7 @@ public abstract class Unit {
     private final int maxAp;
     private final int visionRadius;
 
+    private long ownerId;
     private int ap;
     private int col;
     private int row;
@@ -21,6 +22,25 @@ public abstract class Unit {
         this.ap = maxAp;
         this.col = col;
         this.row = row;
+    }
+
+    protected Unit(long id, long createdAt, String typeName, int maxAp, int visionRadius,
+                   int col, int row) {
+        super(id, createdAt);
+        this.typeName = typeName;
+        this.maxAp = maxAp;
+        this.visionRadius = visionRadius;
+        this.ap = maxAp;
+        this.col = col;
+        this.row = row;
+    }
+
+    public long getOwnerId() {
+        return ownerId;
+    }
+
+    public void setOwnerId(long ownerId) {
+        this.ownerId = ownerId;
     }
 
     public String getTypeName() {

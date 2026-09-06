@@ -103,8 +103,11 @@ public class HudPanel extends JPanel {
         Empire empire = game.getEmpire();
         Map<ResourceType, Integer> rate = empire.netRatePerTurn(game.getMap(), game.getTribes());
 
+        civ.model.Player current = game.getCurrentPlayer();
         turnLabel.setText("Turn " + game.getTurn()
-                + "  " + game.getSeason().getLabel());
+                + "  " + game.getSeason().getLabel()
+                + "  —  " + current.getName() + "'s turn");
+        turnLabel.setForeground(current.getColour().getAwt());
 
         resourcePanel.removeAll();
         for (ResourceType type : ResourceType.values()) {
@@ -129,12 +132,16 @@ public class HudPanel extends JPanel {
                 + " C" + empire.countUnits("Cavalry") + ")");
 
         TownHall townHall = empire.getTownHall();
-        townHallLabel.setText(townHall.describeLevel()
-                + "  HP " + townHall.getHp() + "/" + townHall.getMaxHp()
-                + "  Happy " + empire.happiness()
-                + " (" + empire.getHappiness().getLevelName() + ")");
-
-        queueLabel.setText(townHall.describeQueue());
+        if (townHall != null) {
+            townHallLabel.setText(townHall.describeLevel()
+                    + "  HP " + townHall.getHp() + "/" + townHall.getMaxHp()
+                    + "  Happy " + empire.happiness()
+                    + " (" + empire.getHappiness().getLevelName() + ")");
+            queueLabel.setText(townHall.describeQueue());
+        } else {
+            townHallLabel.setText("No Town Hall");
+            queueLabel.setText("");
+        }
 
         if (game.isStarving()) {
             warningLabel.setText("STARVATION!");

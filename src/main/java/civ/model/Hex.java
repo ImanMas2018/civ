@@ -8,8 +8,11 @@ public class Hex {
     private final ResourceType deposit;
     private int depositAmount;
 
-    private boolean discovered = false;
-    private boolean owned = false;
+    /**
+     * Territory claimed by a non-player (tribe camp ring, etc.).
+     * Player ownership lives on {@link Fog}, not here.
+     */
+    private boolean reserved = false;
     private boolean road = false;
     private boolean blocked = false;
     private Building building;
@@ -42,12 +45,12 @@ public class Hex {
         return depositAmount;
     }
 
-    public boolean isDiscovered() {
-        return discovered;
+    public boolean isReserved() {
+        return reserved;
     }
 
-    public boolean isOwned() {
-        return owned;
+    public void setReserved(boolean reserved) {
+        this.reserved = reserved;
     }
 
     public boolean hasRoad() {
@@ -80,14 +83,6 @@ public class Hex {
 
     public void setDepositAmount(int depositAmount) {
         this.depositAmount = Math.max(0, depositAmount);
-    }
-
-    public void setDiscovered(boolean discovered) {
-        this.discovered = discovered;
-    }
-
-    public void setOwned(boolean owned) {
-        this.owned = owned;
     }
 
     public Building getBuilding() {

@@ -130,6 +130,11 @@ public class ActionPanel extends JPanel implements Scrollable {
                             reasonWhyNot(builder, type),
                             () -> controller.build(builder, type));
                 }
+                Hex foundHex = game.hexOf(builder);
+                addButton("Found Town Hall  (200w 150s 80i 100f)",
+                        game.canFoundTownHall(builder, foundHex),
+                        foundTownHallReason(builder, foundHex),
+                        () -> controller.foundTownHall(builder));
                 Hex demolishHex = game.getInspected() != null
                         ? game.getInspected() : game.hexOf(builder);
                 addButton("Demolish building/road here",
@@ -218,6 +223,12 @@ public class ActionPanel extends JPanel implements Scrollable {
         add(Box.createVerticalStrut(12));
         addTitle("Town Hall");
         TownHall townHall = game.getEmpire().getTownHall();
+        if (townHall == null) {
+            addBody("No Town Hall.");
+            revalidate();
+            repaint();
+            return;
+        }
         addBody(townHall.describeLevel());
         addBody("HP " + townHall.getHp() + "/" + townHall.getMaxHp()
                 + "  Defence " + townHall.getDefence());
@@ -262,11 +273,30 @@ public class ActionPanel extends JPanel implements Scrollable {
         repaint();
     }
 
+    private String foundTownHallReason(Builder builder, Hex hex) {
+        if (!builder.hasCharge()) {
+            return "This builder has no charges left.";
+        }
+        if (hex == null || !hex.getTerrain().isLand()) {
+            return "Need a land hex.";
+        }
+        if (hex.getBuilding() != null) {
+            return "This hex already has a building.";
+        }
+        if (game.isOwned(game.getCurrentPlayer(), hex)) {
+            return "Must found outside your current borders.";
+        }
+        if (game.isClaimed(hex)) {
+            return "This hex is already claimed.";
+        }
+        return "Needs 200 wood, 150 stone, 80 iron, 100 food and 1 AP.";
+    }
+
     private String reasonWhyNot(Builder builder, BuildingType type) {
         if (!builder.hasCharge()) {
             return "This builder has no charges left.";
         }
-        if (!game.hexOf(builder).isOwned()) {
+        if (!game.isOwned(game.getCurrentPlayer(), game.hexOf(builder))) {
             return "This hex is outside your border.";
         }
         if (!game.hexOf(builder).getTerrain().isLand()) {
@@ -282,7 +312,8 @@ public class ActionPanel extends JPanel implements Scrollable {
                 && !game.getEmpire().hasTech(type.getRequiredTech())) {
             return "Needs the technology: " + type.getRequiredTech().getLabel();
         }
-        if (type.getRequiredLevel() > game.getEmpire().getTownHall().getLevel()) {
+        if (game.getEmpire().getTownHall() == null
+                || type.getRequiredLevel() > game.getEmpire().getTownHall().getLevel()) {
             return "Needs Town Hall level " + type.getRequiredLevel();
         }
         if (type.getRequiredTerrain() != null
@@ -293,10 +324,14 @@ public class ActionPanel extends JPanel implements Scrollable {
     }
 
     private String trainReason(UnitBlueprint blueprint) {
-        if (game.getEmpire().getTownHall().isBusy()) {
+        TownHall hall = game.getEmpire().getTownHall();
+        if (hall == null) {
+            return "No Town Hall.";
+        }
+        if (hall.isBusy()) {
             return "Town Hall is busy. Cancel the current order first.";
         }
-        if (blueprint.getRequiredLevel() > game.getEmpire().getTownHall().getLevel()) {
+        if (blueprint.getRequiredLevel() > hall.getLevel()) {
             return "Needs Town Hall level " + blueprint.getRequiredLevel();
         }
         if (blueprint == UnitBlueprint.CAVALRY && !game.hasMilitaryStable()) {
@@ -310,10 +345,14 @@ public class ActionPanel extends JPanel implements Scrollable {
     }
 
     private String researchReason(Tech tech) {
-        if (game.getEmpire().getTownHall().isBusy()) {
+        TownHall hall = game.getEmpire().getTownHall();
+        if (hall == null) {
+            return "No Town Hall.";
+        }
+        if (hall.isBusy()) {
             return "Town Hall is busy. Cancel the current order first.";
         }
-        if (tech.getRequiredLevel() > game.getEmpire().getTownHall().getLevel()) {
+        if (tech.getRequiredLevel() > hall.getLevel()) {
             return "Needs Town Hall level " + tech.getRequiredLevel();
         }
         if (tech.getRequired() != null && !game.getEmpire().hasTech(tech.getRequired())) {

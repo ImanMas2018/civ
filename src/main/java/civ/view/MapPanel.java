@@ -389,7 +389,7 @@ public class MapPanel extends JPanel {
     private void drawHex(Graphics2D g2, Hex hex, double cx, double cy) {
         HexGeometry.writeHexPath(hexShape, cx, cy, screenHexSize() * 0.98);
 
-        if (!hex.isDiscovered()) {
+        if (!game.isDiscovered(game.getCurrentPlayer(), hex)) {
             g2.setColor(FOG_FILL);
             g2.fill(hexShape);
             g2.setColor(FOG_EDGE);
@@ -405,7 +405,12 @@ public class MapPanel extends JPanel {
         g2.setStroke(THIN);
         g2.draw(hexShape);
 
-        if (hex.isOwned()) {
+        civ.model.Player owner = game.ownerOf(hex);
+        if (owner != null) {
+            g2.setColor(owner.getColour().getAwt());
+            g2.setStroke(THICK);
+            g2.draw(hexShape);
+        } else if (hex.isReserved()) {
             g2.setColor(OWNED_EDGE);
             g2.setStroke(THICK);
             g2.draw(hexShape);
@@ -459,7 +464,8 @@ public class MapPanel extends JPanel {
             if (a == null || b == null) {
                 continue;
             }
-            if (!a.isDiscovered() && !b.isDiscovered()) {
+            if (!game.isDiscovered(game.getCurrentPlayer(), a)
+                    && !game.isDiscovered(game.getCurrentPlayer(), b)) {
                 continue;
             }
             double x1 = HexGeometry.centerX(a.getCol(), a.getRow(), HEX_SIZE) * zoom();
@@ -607,10 +613,16 @@ public class MapPanel extends JPanel {
     }
 
     private List<Unit> visibleUnits() {
-        List<Unit> units = new ArrayList<>(game.getUnits());
+        List<Unit> units = new ArrayList<>();
+        for (Unit unit : game.getAllUnits()) {
+            Hex tile = game.hexOf(unit);
+            if (tile != null && game.isDiscovered(game.getCurrentPlayer(), tile)) {
+                units.add(unit);
+            }
+        }
         for (MilitaryUnit hostile : game.getHostiles()) {
             Hex tile = game.hexOf(hostile);
-            if (tile != null && tile.isDiscovered()) {
+            if (tile != null && game.isDiscovered(game.getCurrentPlayer(), tile)) {
                 units.add(hostile);
             }
         }
@@ -620,7 +632,7 @@ public class MapPanel extends JPanel {
             }
             for (civ.model.tribe.TribeGuard guard : tribe.getGuards()) {
                 Hex tile = game.hexOf(guard);
-                if (tile != null && tile.isDiscovered()) {
+                if (tile != null && game.isDiscovered(game.getCurrentPlayer(), tile)) {
                     units.add(guard);
                 }
             }
