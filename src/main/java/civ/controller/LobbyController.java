@@ -6,6 +6,8 @@ import civ.net.client.NetworkManager;
 import civ.net.protocol.Message;
 import civ.net.protocol.MessageCodec;
 import civ.net.protocol.dto.GameStateDto;
+import civ.net.protocol.push.AlliancePrompt;
+import civ.net.protocol.push.BattleReportPush;
 import civ.net.protocol.push.ChatBroadcast;
 import civ.net.protocol.push.GameOverBroadcast;
 import civ.net.protocol.push.GameStateBroadcast;
@@ -17,6 +19,7 @@ import civ.net.protocol.request.ReadyRequest;
 import civ.net.protocol.request.SelectMapRequest;
 import civ.net.protocol.request.StartGameRequest;
 import civ.net.protocol.response.ErrorResponse;
+import civ.view.BattleReportDialog;
 import civ.view.ChatPanel;
 import civ.view.LobbyPanel;
 import java.util.function.Consumer;
@@ -31,6 +34,10 @@ public class LobbyController {
     private final Consumer<String> onFatalDisconnect;
     private final Consumer<GameStateDto> onGameStarted;
     private final ClientState clientState = new ClientState();
+    private Consumer<BattleReportPush> onBattleReport = push -> {
+    };
+    private Consumer<AlliancePrompt> onAlliancePrompt = prompt -> {
+    };
 
     private String localName = "";
     private String host;
@@ -56,6 +63,16 @@ public class LobbyController {
 
     public ClientState getClientState() {
         return clientState;
+    }
+
+    public void setOnBattleReport(Consumer<BattleReportPush> onBattleReport) {
+        this.onBattleReport = onBattleReport == null ? push -> {
+        } : onBattleReport;
+    }
+
+    public void setOnAlliancePrompt(Consumer<AlliancePrompt> onAlliancePrompt) {
+        this.onAlliancePrompt = onAlliancePrompt == null ? prompt -> {
+        } : onAlliancePrompt;
     }
 
     public void setEndpoint(String host, int port) {
@@ -136,6 +153,10 @@ public class LobbyController {
                     winner + " wins!",
                     "Victory",
                     JOptionPane.INFORMATION_MESSAGE);
+        } else if (message instanceof BattleReportPush) {
+            onBattleReport.accept((BattleReportPush) message);
+        } else if (message instanceof AlliancePrompt) {
+            onAlliancePrompt.accept((AlliancePrompt) message);
         } else if (message instanceof ErrorResponse) {
             String reason = ((ErrorResponse) message).getReason();
             JOptionPane.showMessageDialog(lobbyPanel, reason, "Server", JOptionPane.WARNING_MESSAGE);

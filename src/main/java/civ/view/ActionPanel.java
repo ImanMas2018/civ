@@ -204,6 +204,21 @@ public class ActionPanel extends JPanel implements Scrollable {
                         ? "Own the Trading Post hex first."
                         : "Already used the Trading Post this turn.",
                 () -> controller.openTradingPost());
+        if (controller != null && controller.isNetworked()) {
+            int inbox = game.getTradeOffers().pendingFor(game.getViewpointPlayer()).size();
+            addButton("Player trade inbox" + (inbox > 0 ? " (" + inbox + ")" : ""),
+                    true, null, () -> controller.openTradeInbox());
+            addButton("New player trade offer",
+                    controller.isMyTurn(),
+                    "It is not your turn.",
+                    () -> controller.openNewTradeOffer());
+        }
+
+        if (controller != null && (controller.isNetworked() || game.getPlayers().size() > 1)) {
+            add(Box.createVerticalStrut(8));
+            addTitle("Diplomacy");
+            addButton("Open diplomacy", true, null, () -> controller.openDiplomacy());
+        }
 
         java.util.List<civ.model.tribe.Tribe> known = new java.util.ArrayList<>();
         for (civ.model.tribe.Tribe tribe : game.getTribes()) {

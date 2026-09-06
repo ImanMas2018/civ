@@ -222,6 +222,17 @@ public class MainWindow extends JFrame {
             root.add(gameScreen, "game");
             cards.show(root, "game");
 
+            lobbyController.setOnBattleReport(push ->
+                    BattleReportDialog.show(gameScreen, push));
+            lobbyController.setOnAlliancePrompt(prompt -> {
+                int answer = JOptionPane.showConfirmDialog(gameScreen,
+                        prompt.getFromPlayerName() + " proposes an alliance. Accept?",
+                        "Alliance proposal",
+                        JOptionPane.YES_NO_OPTION);
+                gameScreen.getController().replyAlliance(
+                        prompt.getFromPlayerId(), answer == JOptionPane.YES_OPTION);
+            });
+
             lobbyController.getClientState().addListener(() -> {
                 GameStateDto next = lobbyController.getClientState().get();
                 if (next == null || gameScreen == null) {

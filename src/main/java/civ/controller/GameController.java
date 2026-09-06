@@ -6,6 +6,7 @@ import civ.model.BuildingType;
 import civ.model.Game;
 import civ.model.Hex;
 import civ.model.MilitaryUnit;
+import civ.model.Player;
 import civ.model.Tech;
 import civ.model.TurnEngine;
 import civ.model.Unit;
@@ -14,10 +15,16 @@ import civ.model.Worker;
 import civ.model.combat.BattleReport;
 import civ.model.tribe.Tribe;
 import civ.net.client.NetworkManager;
+import civ.net.protocol.request.AllianceReplyRequest;
+import civ.net.protocol.request.AllianceRequest;
+import civ.net.protocol.request.AttackRequest;
+import civ.net.protocol.request.BreakAllianceRequest;
 import civ.net.protocol.request.BuildRequest;
 import civ.net.protocol.request.BuildRoadRequest;
 import civ.net.protocol.request.BuildWallRequest;
 import civ.net.protocol.request.CancelTownHallOrderRequest;
+import civ.net.protocol.request.CancelTradeRequest;
+import civ.net.protocol.request.DeclareWarRequest;
 import civ.net.protocol.request.DemolishRequest;
 import civ.net.protocol.request.DemolishWallRequest;
 import civ.net.protocol.request.EndTurnRequest;
@@ -26,13 +33,17 @@ import civ.net.protocol.request.FoundTownHallRequest;
 import civ.net.protocol.request.MoveUnitRequest;
 import civ.net.protocol.request.ResearchRequest;
 import civ.net.protocol.request.StationRequest;
+import civ.net.protocol.request.TradeOfferRequest;
+import civ.net.protocol.request.TradeReplyRequest;
 import civ.net.protocol.request.TrainRequest;
 import civ.net.protocol.request.UnstationRequest;
 import civ.net.protocol.request.UpgradeTownHallRequest;
 import civ.view.ActionPanel;
 import civ.view.BattlePanel;
+import civ.view.DiplomacyPanel;
 import civ.view.HudPanel;
 import civ.view.MapPanel;
+import civ.view.TradeInboxPanel;
 import civ.view.TribePanel;
 import javax.swing.JDialog;
 import javax.swing.JOptionPane;
@@ -94,13 +105,20 @@ public class GameController {
         Unit selected = game.getSelected();
 
         if (attacking && selected instanceof MilitaryUnit) {
+            attacking = false;
+            Hex from = game.hexOf(selected);
             if (isNetworked()) {
-                attacking = false;
+                if (!isMyTurn()) {
+                    refresh();
+                    return;
+                }
+                if (from != null && hex != null) {
+                    network.send(new AttackRequest(
+                            from.getCol(), from.getRow(), hex.getCol(), hex.getRow()));
+                }
                 refresh();
                 return;
             }
-            attacking = false;
-            Hex from = game.hexOf(selected);
             if (game.isDiceAttack(from, hex)) {
                 BattleReport report = game.beginDiceAttack(from, hex);
                 if (report != null) {
@@ -121,10 +139,21 @@ public class GameController {
         }
         if (attackingWall && selected instanceof MilitaryUnit) {
             attackingWall = false;
-            if (!isNetworked()) {
-                game.attackWall(game.hexOf(selected), hex);
-                mapPanel.invalidateMap();
+            Hex from = game.hexOf(selected);
+            if (isNetworked()) {
+                if (!isMyTurn()) {
+                    refresh();
+                    return;
+                }
+                if (from != null && hex != null) {
+                    network.send(new AttackRequest(
+                            from.getCol(), from.getRow(), hex.getCol(), hex.getRow()));
+                }
+                refresh();
+                return;
             }
+            game.attackWall(from, hex);
+            mapPanel.invalidateMap();
             refresh();
             return;
         }
@@ -316,7 +345,7 @@ public class GameController {
     }
 
     public void startAttack() {
-        if (isNetworked()) {
+        if (isNetworked() && !isMyTurn()) {
             return;
         }
         attacking = true;
@@ -327,7 +356,7 @@ public class GameController {
     }
 
     public void startAttackWall() {
-        if (isNetworked()) {
+        if (isNetworked() && !isMyTurn()) {
             return;
         }
         attackingWall = true;
@@ -517,5 +546,115 @@ public class GameController {
             return;
         }
         civ.view.TradeDialog.showTradingPost(mapPanel, game, this::refresh);
+    }
+
+    public void openDiplomacy() {
+        DiplomacyPanel.showDialog(mapPanel, game, this);
+    }
+
+    public void openTradeInbox() {
+        if (!isNetworked()) {
+            JOptionPane.showMessageDialog(mapPanel, "Player trade is only available in multiplayer.");
+            return;
+        }
+        TradeInboxPanel.showInbox(mapPanel, game, this);
+    }
+
+    public void openNewTradeOffer() {
+        if (!isNetworked()) {
+            JOptionPane.showMessageDialog(mapPanel, "Player trade is only available in multiplayer.");
+            return;
+        }
+        if (!isMyTurn()) {
+            return;
+        }
+        TradeInboxPanel.showNewOffer(mapPanel, game, this);
+    }
+
+    public void declareWar(long targetPlayerId) {
+        if (isNetworked()) {
+            if (!isMyTurn()) {
+                return;
+            }
+            network.send(new DeclareWarRequest(targetPlayerId));
+            return;
+        }
+        Player me = game.getCurrentPlayer();
+        Player target = game.getPlayer(targetPlayerId);
+        if (me == null || target == null) {
+            return;
+        }
+        game.getDiplomacy().set(me, target, civ.model.diplomacy.DiplomaticState.ENEMY);
+        game.addLog(me.getName() + " has declared war on " + target.getName() + "!");
+        refresh();
+    }
+
+    public void proposeAlliance(long targetPlayerId) {
+        if (isNetworked()) {
+            if (!isMyTurn()) {
+                return;
+            }
+            network.send(new AllianceRequest(targetPlayerId));
+            return;
+        }
+        // Hot-seat: accept immediately (same machine).
+        Player me = game.getCurrentPlayer();
+        Player target = game.getPlayer(targetPlayerId);
+        if (me == null || target == null) {
+            return;
+        }
+        game.getDiplomacy().set(me, target, civ.model.diplomacy.DiplomaticState.ALLIED);
+        game.addLog(me.getName() + " and " + target.getName() + " are now allied.");
+        refresh();
+    }
+
+    public void replyAlliance(long proposerPlayerId, boolean accept) {
+        if (!isNetworked()) {
+            return;
+        }
+        network.send(new AllianceReplyRequest(proposerPlayerId, accept));
+    }
+
+    public void breakAlliance(long targetPlayerId) {
+        if (isNetworked()) {
+            if (!isMyTurn()) {
+                return;
+            }
+            network.send(new BreakAllianceRequest(targetPlayerId));
+            return;
+        }
+        Player me = game.getCurrentPlayer();
+        Player target = game.getPlayer(targetPlayerId);
+        if (me == null || target == null) {
+            return;
+        }
+        game.getDiplomacy().set(me, target, civ.model.diplomacy.DiplomaticState.NEUTRAL);
+        game.addLog(me.getName() + " has broken the alliance with " + target.getName() + ".");
+        refresh();
+    }
+
+    public void sendTradeOffer(long targetPlayerId,
+                               int offerFood, int offerWood, int offerStone, int offerIron,
+                               int askFood, int askWood, int askStone, int askIron) {
+        if (!isNetworked() || !isMyTurn()) {
+            return;
+        }
+        network.send(new TradeOfferRequest(targetPlayerId,
+                offerFood, offerWood, offerStone, offerIron,
+                askFood, askWood, askStone, askIron));
+    }
+
+    public void replyTrade(long offerId, boolean accept) {
+        if (!isNetworked() || !isMyTurn()) {
+            return;
+        }
+        network.send(new TradeReplyRequest(offerId, accept));
+    }
+
+    public void cancelTrade(long offerId) {
+        if (!isNetworked() || !isMyTurn()) {
+            return;
+        }
+        network.send(new CancelTradeRequest(offerId));
     }
 }
