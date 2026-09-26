@@ -3,16 +3,24 @@ package civ.net.server;
 import civ.model.Game;
 import civ.model.Player;
 import civ.net.protocol.Message;
+import civ.net.protocol.push.ChatBroadcast;
+import civ.net.protocol.push.GameOverBroadcast;
 import civ.net.protocol.push.LobbyStateBroadcast;
 import civ.net.protocol.push.NoticePush;
 import civ.net.protocol.response.ErrorResponse;
 import civ.net.server.handler.DisconnectHandler;
 import civ.net.server.handler.EndTurnHandler;
 import civ.net.server.handler.RequestHandler;
+import civ.net.ws.WebSocketChatServer;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
 public class ServerSession {
+
+    private static final DateTimeFormatter CLOCK = DateTimeFormatter.ofPattern("HH:mm");
+    private static final int MAX_CHAT_LENGTH = 500;
 
     /** Everything that touches the model holds this. */
     private final Object lock = new Object();
@@ -23,6 +31,7 @@ public class ServerSession {
 
     private Game game;
     private HeartbeatServer heartbeatServer;
+    private WebSocketChatServer webSocketChat;
     private boolean gameOver;
 
     public ServerSession(ClientRegistry clients) {
@@ -53,7 +62,7 @@ public class ServerSession {
 
     public void markGameOver(String winnerName) {
         this.gameOver = true;
-        clients.broadcast(new civ.net.protocol.push.GameOverBroadcast(winnerName));
+        clients.broadcast(new GameOverBroadcast(winnerName));
     }
 
     public ClientRegistry getClients() {
@@ -62,6 +71,53 @@ public class ServerSession {
 
     public void setHeartbeatServer(HeartbeatServer heartbeatServer) {
         this.heartbeatServer = heartbeatServer;
+    }
+
+    public void setWebSocketChat(WebSocketChatServer webSocketChat) {
+        this.webSocketChat = webSocketChat;
+    }
+
+    /**
+     * Single door for chat: Swing clients and browser tabs all land here so both
+     * sides see the same line.
+     */
+    public void publishChat(String sender, String text) {
+        String cleanSender = sender == null || sender.isBlank() ? "Unknown" : sender.trim();
+        String cleanText = text == null ? "" : text.trim();
+        if (cleanText.isEmpty()) {
+            return;
+        }
+        if (cleanText.length() > MAX_CHAT_LENGTH) {
+            cleanText = cleanText.substring(0, MAX_CHAT_LENGTH);
+        }
+
+        String time = LocalTime.now().format(CLOCK);
+        ChatBroadcast broadcast = new ChatBroadcast(cleanSender, cleanText, time);
+        clients.broadcast(broadcast);
+        if (webSocketChat != null) {
+            webSocketChat.broadcastLine("[" + time + "] " + cleanSender + ": " + cleanText);
+        }
+    }
+
+    /** Browser messages arrive as {@code "Name: body"} or plain text. */
+    public void publishBrowserChat(String raw) {
+        if (raw == null) {
+            return;
+        }
+        String trimmed = raw.trim();
+        if (trimmed.isEmpty()) {
+            return;
+        }
+        int colon = trimmed.indexOf(':');
+        if (colon > 0 && colon < trimmed.length() - 1) {
+            String name = trimmed.substring(0, colon).trim();
+            String body = trimmed.substring(colon + 1).trim();
+            if (!name.isEmpty() && !body.isEmpty()) {
+                publishChat(name, body);
+                return;
+            }
+        }
+        publishChat("Browser", trimmed);
     }
 
     public void noteHeartbeat(long playerId) {

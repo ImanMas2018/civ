@@ -165,6 +165,7 @@ public class MainWindow extends JFrame {
             hostedServer = new GameServer(port);
             hostedServer.start();
             connectAsClient("127.0.0.1", port, username);
+            System.out.println("Browser chat: http://localhost:" + hostedServer.getWebSocketPort() + "/");
         } catch (IOException ex) {
             shutdownNetwork();
             connectPanel.setStatus("Could not host on port " + port + ": " + ex.getMessage());
