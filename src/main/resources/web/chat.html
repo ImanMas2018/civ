@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Civ chat</title>
+  <style>
+    body { font-family: sans-serif; max-width: 520px; margin: 24px auto; }
+    #log { list-style: none; padding: 0; height: 320px; overflow-y: auto;
+           border: 1px solid #ccc; background: #fafafa; }
+    #log li { padding: 4px 8px; border-bottom: 1px solid #eee; }
+    #row { display: flex; gap: 8px; margin-top: 8px; }
+    #name { width: 100px; }
+    #text { flex: 1; }
+    #status { color: #666; font-size: 13px; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <h1>Civ WebSocket chat</h1>
+  <div id="status">Connecting…</div>
+  <ul id="log"></ul>
+  <div id="row">
+    <input id="name" value="Browser" maxlength="24" title="Display name">
+    <input id="text" autofocus placeholder="Type a message and press Enter">
+  </div>
+
+  <script>
+    const status = document.getElementById("status");
+    const log = document.getElementById("log");
+    const nameInput = document.getElementById("name");
+    const textInput = document.getElementById("text");
+
+    const host = location.hostname || "localhost";
+    const port = location.port || "5556";
+    const socket = new WebSocket("ws://" + host + ":" + port + "/chat");
+
+    socket.onopen = () => { status.textContent = "Connected to ws://" + host + ":" + port + "/chat"; };
+    socket.onclose = () => { status.textContent = "Disconnected"; };
+    socket.onerror = () => { status.textContent = "Connection error"; };
+
+    socket.onmessage = event => {
+      const item = document.createElement("li");
+      item.textContent = event.data;
+      log.appendChild(item);
+      log.scrollTop = log.scrollHeight;
+    };
+
+    textInput.addEventListener("keydown", event => {
+      if (event.key === "Enter" && textInput.value.trim()) {
+        const name = (nameInput.value || "Browser").trim() || "Browser";
+        socket.send(name + ": " + textInput.value.trim());
+        textInput.value = "";
+      }
+    });
+  </script>
+</body>
+</html>
